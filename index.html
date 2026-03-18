@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Roomba Vacuum Game</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="gameContainer">
+        <h1 id="gameTitle">Roomba Vacuum</h1>
+        <canvas id="gameCanvas" width="720" height="576"></canvas>
+        <div id="controlPanel">
+            <div id="statsPanel">
+                <div class="stat">
+                    <span class="stat-label">Cleaned</span>
+                    <span id="cleanedCount" class="stat-value">0 / 0</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Moves <span id="parLabel" class="par-label">(par: <span id="parCount">--</span>)</span></span>
+                    <span id="moveCount" class="stat-value">0</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Score</span>
+                    <span id="scoreDisplay" class="stat-value">0</span>
+                </div>
+            </div>
+            <div id="dpadContainer">
+                <div id="dpad">
+                    <button class="dpad-btn" id="btnUp" data-dir="up">&#9650;</button>
+                    <button class="dpad-btn" id="btnLeft" data-dir="left">&#9664;</button>
+                    <button class="dpad-btn dpad-center" id="btnCenter" disabled></button>
+                    <button class="dpad-btn" id="btnRight" data-dir="right">&#9654;</button>
+                    <button class="dpad-btn" id="btnDown" data-dir="down">&#9660;</button>
+                </div>
+            </div>
+            <div id="rightPanel">
+                <div id="batteryContainer">
+                    <span class="stat-label">Battery</span>
+                    <div id="batteryBar">
+                        <div id="batteryFill"></div>
+                    </div>
+                    <span id="batteryText">100%</span>
+                </div>
+                <div id="levelDisplay">
+                    <span class="stat-label">Level</span>
+                    <span id="levelNum" class="stat-value">1</span>
+                </div>
+                <button id="btnRestart" class="action-btn">Restart</button>
+            </div>
+        </div>
+    </div>
+    <script src="game.js"></script>
+</body>
+</html>
