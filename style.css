@@ -207,3 +207,20 @@ body {
 .action-btn:active {
     background: #15665A;
 }
+
+.action-btn-quiet {
+    background: #4A4A5A;
+}
+
+.action-btn-quiet:hover {
+    background: #5A5A6A;
+}
+
+/* One-line key legend under the panel */
+#legend {
+    width: 720px;
+    text-align: center;
+    font-size: 11px;
+    color: #8A8A96;
+    letter-spacing: 0.4px;
+}

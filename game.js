@@ -10,7 +10,10 @@ const CLEAN = 1;
 const OBSTACLE = 2;
 const CHARGER = 3;
 
-const MOVE_INTERVAL = 120; // ms between moves when holding
+const MOVE_INTERVAL = 120;    // ms between moves when holding (top-down)
+const FP_MOVE_INTERVAL = 180; // slower in first person, where 8 tiles/s feels like a sprint
+const FRAME_MS = 1000 / 60;   // animation constants below are tuned for 60 fps and scaled by dt
+const BANNER_MS = 2800;       // how long the level-name banner stays up
 
 const COLORS = {
     dirty: '#E8D5B7',
@@ -416,6 +419,7 @@ function computeParRoute(levelIndex) {
 
 // === GAME STATE ===
 let canvas, ctx;
+let canvasDpr = 1; // device pixel ratio the canvas backing store is scaled by
 let grid = [];
 let roomba = { col: 0, row: 0, dir: 'right', battery: 100, drawX: 0, drawY: 0 };
 let currentLevel = 0;
@@ -432,6 +436,14 @@ let chargerPulse = 0;
 let cleanAnimations = [];
 let roombaWheelAngle = 0; // for spinning wheels
 let tileCleanFade = {}; // tracks fade-in progress for recently cleaned tiles
+let levelStartScore = 0; // score when the level began; restored on restart so tiles can't pay twice
+let levelResult = null;  // summary shown on the Level Complete overlay
+let lastFrameTime = 0;
+let dtMs = FRAME_MS;     // elapsed ms since the previous frame (clamped)
+let dtFrames = 1;        // the same, in units of 60 fps frames
+let bannerText = '';
+let bannerTimer = 0;     // ms left to show the level banner
+let helpVisible = false;
 
 // === FIRST-PERSON MODE ===
 let viewMode = 'TD'; // 'TD' = top-down, 'FP' = first-person
@@ -470,7 +482,7 @@ let holdInterval = null;
 let keysDown = new Set();
 
 // DOM elements
-let elCleaned, elMoves, elScore, elBatteryFill, elBatteryText, elLevelNum, elBtnRestart, elParCount, elBtnView;
+let elCleaned, elMoves, elScore, elBatteryFill, elBatteryText, elLevelNum, elBtnRestart, elParCount, elBtnView, elBtnHelp;
 
 // === INITIALIZATION ===
 function initLevel(levelIndex) {
@@ -507,6 +519,9 @@ function initLevel(levelIndex) {
     roomba.battery = 100;
     roomba.drawX = level.charger.col * TILE + TILE / 2;
     roomba.drawY = level.charger.row * TILE + TILE / 2;
+    // Keep the first-person camera in step with the Roomba's facing
+    fpTargetAngle = FP_ANGLE_MAP[roomba.dir];
+    fpAngle = fpTargetAngle;
 
     totalDirty = 0;
     for (let r = 0; r < ROWS; r++) {
@@ -517,10 +532,14 @@ function initLevel(levelIndex) {
 
     cleaned = 0;
     moves = 0;
+    score = levelStartScore;
+    levelResult = null;
     gameState = 'PLAYING';
     bumpFlash = 0;
     cleanAnimations = [];
     tileCleanFade = {};
+    bannerText = level.name;
+    bannerTimer = BANNER_MS;
     stopHold();
 
     const parResult = computeParRoute(levelIndex);
@@ -538,106 +557,28 @@ const FP_TURN_STEP = Math.PI / 2; // 90 degree turns
 const FP_DIR_ORDER = ['up', 'right', 'down', 'left']; // clockwise
 const FP_ANGLE_MAP = { up: -Math.PI / 2, right: 0, down: Math.PI / 2, left: Math.PI };
 
-function handleFpDirection(dir) {
-    if (gameState !== 'PLAYING') return;
+const DIR_DELTAS = {
+    up:    { dc: 0, dr: -1 },
+    down:  { dc: 0, dr: 1 },
+    left:  { dc: -1, dr: 0 },
+    right: { dc: 1, dr: 0 },
+};
+const OPPOSITE_DIR = { up: 'down', down: 'up', left: 'right', right: 'left' };
 
-    if (dir === 'left' || dir === 'right') {
-        // Rotate: find current facing index and turn
-        let idx = FP_DIR_ORDER.indexOf(roomba.dir);
-        if (idx < 0) idx = 0;
-        idx = (idx + (dir === 'right' ? 1 : -1) + 4) % 4;
-        roomba.dir = FP_DIR_ORDER[idx];
-        fpTargetAngle = FP_ANGLE_MAP[roomba.dir];
-        return; // rotation only, no movement
-    }
+// The one movement rule, shared by both views. Returns true if the Roomba moved.
+function tryMove(dc, dr) {
+    const newCol = roomba.col + dc;
+    const newRow = roomba.row + dr;
 
-    // Forward (up) or backward (down) relative to current facing
-    const deltas = { up: { dc: 0, dr: -1 }, down: { dc: 0, dr: 1 }, left: { dc: -1, dr: 0 }, right: { dc: 1, dr: 0 } };
-    if (dir === 'up') {
-        // Move in the direction we're facing — call grid movement directly
-        const fwd = roomba.dir;
-        viewMode = 'TD'; // temporarily disable FP remap
-        handleDirection(fwd);
-        viewMode = 'FP';
-        return;
-    } else if (dir === 'down') {
-        // Move opposite to facing direction
-        const opposite = { up: 'down', down: 'up', left: 'right', right: 'left' };
-        const backDir = opposite[roomba.dir];
-        // Move backward but keep facing the same direction
-        const d = deltas[backDir];
-        const newCol = roomba.col + d.dc;
-        const newRow = roomba.row + d.dr;
-        if (newCol < 0 || newCol >= COLS || newRow < 0 || newRow >= ROWS) { bumpFlash = 10; return; }
-        if (grid[newRow][newCol] === OBSTACLE) { bumpFlash = 10; return; }
-        roomba.col = newCol;
-        roomba.row = newRow;
-        moves++;
-        roombaWheelAngle += 0.5;
-        const cost = LEVELS[currentLevel].batteryCost || 1;
-        roomba.battery = Math.max(0, roomba.battery - cost);
-        if (grid[newRow][newCol] === DIRTY) {
-            grid[newRow][newCol] = CLEAN;
-            cleaned++;
-            score += 10;
-            cleanAnimations.push({ col: newCol, row: newRow, progress: 0 });
-            tileCleanFade[`${newCol},${newRow}`] = 0;
-        }
-        if (grid[newRow][newCol] === CHARGER) roomba.battery = 100;
-        if (cleaned >= totalDirty) {
-            const bonus = Math.max(0, (totalDirty * 2 - moves)) * 5;
-            score += bonus;
-            gameState = 'LEVEL_COMPLETE';
-            stopHold();
-        }
-        if (roomba.battery <= 0 && gameState === 'PLAYING') {
-            gameState = 'GAME_OVER';
-            stopHold();
-        }
-        updateUI();
-    }
-}
-
-function handleDirection(dir) {
-    if (gameState !== 'PLAYING') return;
-
-    // In FP mode, remap to relative controls
-    if (viewMode === 'FP') {
-        handleFpDirection(dir);
-        return;
-    }
-
-    const deltas = {
-        up:    { dc: 0, dr: -1 },
-        down:  { dc: 0, dr: 1 },
-        left:  { dc: -1, dr: 0 },
-        right: { dc: 1, dr: 0 },
-    };
-
-    const d = deltas[dir];
-    if (!d) return;
-
-    roomba.dir = dir;
-    roombaWheelAngle += 0.5;
-    // Update FP camera target angle
-    const dirAnglesMap = { up: -Math.PI / 2, down: Math.PI / 2, left: Math.PI, right: 0 };
-    fpTargetAngle = dirAnglesMap[dir];
-    const newCol = roomba.col + d.dc;
-    const newRow = roomba.row + d.dr;
-
-    if (newCol < 0 || newCol >= COLS || newRow < 0 || newRow >= ROWS) {
+    if (newCol < 0 || newCol >= COLS || newRow < 0 || newRow >= ROWS || grid[newRow][newCol] === OBSTACLE) {
         bumpFlash = 10;
-        return;
-    }
-
-    if (grid[newRow][newCol] === OBSTACLE) {
-        bumpFlash = 10;
-        return;
+        return false;
     }
 
     roomba.col = newCol;
     roomba.row = newRow;
     moves++;
+    roombaWheelAngle += 0.5;
 
     const cost = LEVELS[currentLevel].batteryCost || 1;
     roomba.battery = Math.max(0, roomba.battery - cost);
@@ -655,18 +596,56 @@ function handleDirection(dir) {
     }
 
     if (cleaned >= totalDirty) {
-        const bonus = Math.max(0, (totalDirty * 2 - moves)) * 5;
-        score += bonus;
-        gameState = 'LEVEL_COMPLETE';
-        stopHold();
-    }
-
-    if (roomba.battery <= 0 && gameState === 'PLAYING') {
+        completeLevel();
+    } else if (roomba.battery <= 0) {
         gameState = 'GAME_OVER';
         stopHold();
     }
 
     updateUI();
+    return true;
+}
+
+// Level finished. The bonus is tied to par so the target on screen and the scoring agree.
+function completeLevel() {
+    const underPar = Math.max(0, parMoves - moves);
+    const bonus = 200 + underPar * 10;
+    const stars = moves <= parMoves ? 3 : moves <= parMoves * 1.25 ? 2 : 1;
+    score += bonus;
+    levelResult = { moves, par: parMoves, bonus, stars, tileScore: cleaned * 10 };
+    gameState = 'LEVEL_COMPLETE';
+    stopHold();
+}
+
+// First person: left/right turn 90 degrees in place, up/down drive forward/back relative to facing.
+function handleFpDirection(dir) {
+    if (dir === 'left' || dir === 'right') {
+        let idx = FP_DIR_ORDER.indexOf(roomba.dir);
+        if (idx < 0) idx = 0;
+        idx = (idx + (dir === 'right' ? 1 : -1) + 4) % 4;
+        roomba.dir = FP_DIR_ORDER[idx];
+        fpTargetAngle = FP_ANGLE_MAP[roomba.dir];
+        return;
+    }
+    const moveDir = dir === 'up' ? roomba.dir : OPPOSITE_DIR[roomba.dir];
+    const d = DIR_DELTAS[moveDir];
+    tryMove(d.dc, d.dr);
+}
+
+function handleDirection(dir) {
+    if (gameState !== 'PLAYING' || helpVisible) return;
+
+    if (viewMode === 'FP') {
+        handleFpDirection(dir);
+        return;
+    }
+
+    const d = DIR_DELTAS[dir];
+    if (!d) return;
+
+    roomba.dir = dir;
+    fpTargetAngle = FP_ANGLE_MAP[dir];
+    tryMove(d.dc, d.dr);
 }
 
 // === PRESS AND HOLD ===
@@ -675,13 +654,16 @@ function startHold(dir) {
     stopHold();
     heldDir = dir;
     handleDirection(dir);
+    // Turning in 3D is one step per press. Auto-repeating it spins the camera.
+    if (viewMode === 'FP' && (dir === 'left' || dir === 'right')) return;
+    const interval = viewMode === 'FP' ? FP_MOVE_INTERVAL : MOVE_INTERVAL;
     holdInterval = setInterval(() => {
         if (heldDir === dir) {
             handleDirection(dir);
         } else {
             stopHold();
         }
-    }, MOVE_INTERVAL);
+    }, interval);
 }
 
 function stopHold() {
@@ -692,6 +674,35 @@ function stopHold() {
     }
 }
 
+function toggleView() {
+    if (gameState !== 'PLAYING') return;
+    viewMode = viewMode === 'TD' ? 'FP' : 'TD';
+    // Snap the camera to the Roomba's real facing so the two views never disagree
+    fpTargetAngle = FP_ANGLE_MAP[roomba.dir];
+    fpAngle = fpTargetAngle;
+    stopHold();
+    updateViewButtons();
+}
+
+function updateViewButtons() {
+    if (elBtnView) elBtnView.textContent = viewMode === 'FP' ? '2D View' : '3D View';
+}
+
+// Restart keeps the current view. After the final level it starts the game over.
+function restartLevel() {
+    if (gameState === 'LEVEL_COMPLETE' && currentLevel === LEVELS.length - 1) {
+        currentLevel = 0;
+        levelStartScore = 0;
+    }
+    npcReplay.active = false;
+    initLevel(currentLevel);
+}
+
+function toggleHelp() {
+    helpVisible = !helpVisible;
+    stopHold();
+}
+
 // Keyboard
 const keyMap = {
     ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right',
@@ -700,6 +711,17 @@ const keyMap = {
 };
 
 document.addEventListener('keydown', (e) => {
+    // H or ? toggles the help screen; Escape closes it; nothing else gets through while it is up
+    if (e.key === 'h' || e.key === 'H' || e.key === '?') {
+        e.preventDefault();
+        toggleHelp();
+        return;
+    }
+    if (helpVisible) {
+        if (e.key === 'Escape') toggleHelp();
+        return;
+    }
+
     // W key: watch par route when level complete, otherwise move up
     if ((e.key === 'w' || e.key === 'W') && gameState === 'LEVEL_COMPLETE') {
         e.preventDefault();
@@ -723,18 +745,13 @@ document.addEventListener('keydown', (e) => {
 
     // V: toggle first-person view
     if (e.key === 'v' || e.key === 'V') {
-        if (gameState === 'PLAYING') {
-            viewMode = viewMode === 'TD' ? 'FP' : 'TD';
-            if (elBtnView) elBtnView.textContent = viewMode === 'FP' ? '2D View' : '3D View';
-        }
+        toggleView();
         return;
     }
 
-    // R: restart (also exits replay)
+    // R: restart the level in the current view (also exits replay)
     if (e.key === 'r' || e.key === 'R') {
-        viewMode = 'TD';
-        if (elBtnView) elBtnView.textContent = '3D View';
-        initLevel(currentLevel);
+        restartLevel();
         return;
     }
 
@@ -766,16 +783,25 @@ document.addEventListener('keyup', (e) => {
     }
 });
 
+// A key released while another window has focus never sends keyup; don't leave the Roomba driving.
+window.addEventListener('blur', () => {
+    stopHold();
+    keysDown.clear();
+});
+
 // === RENDERING ===
 
 // Floor texture pattern (generated once)
 let floorPattern = null;
 let cleanPattern = null;
+let floorTileCanvas = null; // the tile artwork itself, reused as the 3D floor texture
+let cleanTileCanvas = null;
 function createFloorPatterns() {
-    // Dirty floor - realistic hardwood plank texture
+    // Dirty floor - realistic hardwood plank texture (drawn at device resolution so it stays crisp)
     const fc = document.createElement('canvas');
-    fc.width = TILE; fc.height = TILE;
+    fc.width = TILE * canvasDpr; fc.height = TILE * canvasDpr;
     const fctx = fc.getContext('2d');
+    fctx.scale(canvasDpr, canvasDpr);
     // Base warm wood tone
     const woodBase = fctx.createLinearGradient(0, 0, TILE, 0);
     woodBase.addColorStop(0, '#D4BC96');
@@ -822,11 +848,14 @@ function createFloorPatterns() {
     fctx.fillStyle = vign;
     fctx.fillRect(0, 0, TILE, TILE);
     floorPattern = ctx.createPattern(fc, 'repeat');
+    floorPattern.setTransform(new DOMMatrix().scale(1 / canvasDpr));
+    floorTileCanvas = fc;
 
     // Clean floor - polished gleaming surface
     const cc = document.createElement('canvas');
-    cc.width = TILE; cc.height = TILE;
+    cc.width = TILE * canvasDpr; cc.height = TILE * canvasDpr;
     const cctx = cc.getContext('2d');
+    cctx.scale(canvasDpr, canvasDpr);
     // Base clean color with subtle gradient
     const cleanBase = cctx.createLinearGradient(0, 0, TILE, TILE);
     cleanBase.addColorStop(0, '#A8DEB8');
@@ -858,6 +887,8 @@ function createFloorPatterns() {
     cctx.lineTo(TILE, TILE - 0.5);
     cctx.stroke();
     cleanPattern = ctx.createPattern(cc, 'repeat');
+    cleanPattern.setTransform(new DOMMatrix().scale(1 / canvasDpr));
+    cleanTileCanvas = cc;
 }
 
 function drawGrid() {
@@ -875,7 +906,7 @@ function drawGrid() {
                     // Smooth fade from dirty to clean
                     ctx.fillStyle = floorPattern || COLORS.dirty;
                     ctx.fillRect(x, y, TILE, TILE);
-                    tileCleanFade[fadeKey] = Math.min(1, tileCleanFade[fadeKey] + 0.05);
+                    tileCleanFade[fadeKey] = Math.min(1, tileCleanFade[fadeKey] + 0.05 * dtFrames);
                     ctx.save();
                     ctx.globalAlpha = tileCleanFade[fadeKey];
                     ctx.fillStyle = cleanPattern || COLORS.clean;
@@ -1748,7 +1779,7 @@ function drawRoomba() {
     // Smooth interpolation toward target position
     const targetX = roomba.col * TILE + TILE / 2;
     const targetY = roomba.row * TILE + TILE / 2;
-    const lerp = 0.3; // smoothing factor (0=no movement, 1=instant snap)
+    const lerp = easeK(0.3); // smoothing factor per 60 fps frame, scaled to real elapsed time
     roomba.drawX += (targetX - roomba.drawX) * lerp;
     roomba.drawY += (targetY - roomba.drawY) * lerp;
     // Snap if very close to avoid infinite creep
@@ -1913,13 +1944,6 @@ function drawRoomba() {
     ctx.stroke();
     ctx.restore();
 
-    // "CLEAN" text on button (tiny)
-    ctx.fillStyle = 'rgba(255,255,255,0.6)';
-    ctx.font = 'bold 3.5px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('CLEAN', 0, 0);
-
     // Specular highlight - realistic plastic shine
     const specGrad = ctx.createRadialGradient(-5, -7, 0, -4, -6, 8);
     specGrad.addColorStop(0, 'rgba(255,255,255,0.22)');
@@ -1975,7 +1999,7 @@ function drawRoomba() {
 function drawCleanAnimations() {
     for (let i = cleanAnimations.length - 1; i >= 0; i--) {
         const anim = cleanAnimations[i];
-        anim.progress += 0.035;
+        anim.progress += 0.035 * dtFrames;
         if (anim.progress >= 1) {
             cleanAnimations.splice(i, 1);
             continue;
@@ -2042,10 +2066,10 @@ function startParReplay() {
 function updateNpcReplay() {
     if (!npcReplay.active || gameState !== 'PAR_REPLAY') return;
 
-    npcReplay.timer++;
-    // Step every N frames (NPC_STEP_INTERVAL ms / ~16.6ms per frame)
-    const framesPerStep = Math.max(1, Math.round(NPC_STEP_INTERVAL / 16.6));
-    if (npcReplay.timer % framesPerStep !== 0) return;
+    // Step every NPC_STEP_INTERVAL ms of real time, whatever the display's refresh rate
+    npcReplay.timer += dtMs;
+    if (npcReplay.timer < NPC_STEP_INTERVAL) return;
+    npcReplay.timer -= NPC_STEP_INTERVAL;
 
     npcReplay.stepIndex++;
     if (npcReplay.stepIndex >= parPath.length) {
@@ -2131,8 +2155,9 @@ function drawNpcVacuum() {
     // Smooth interpolation
     const targetX = npcReplay.col * TILE + TILE / 2;
     const targetY = npcReplay.row * TILE + TILE / 2;
-    npcReplay.drawX += (targetX - npcReplay.drawX) * 0.25;
-    npcReplay.drawY += (targetY - npcReplay.drawY) * 0.25;
+    const npcLerp = easeK(0.25);
+    npcReplay.drawX += (targetX - npcReplay.drawX) * npcLerp;
+    npcReplay.drawY += (targetY - npcReplay.drawY) * npcLerp;
     if (Math.abs(targetX - npcReplay.drawX) < 0.5) npcReplay.drawX = targetX;
     if (Math.abs(targetY - npcReplay.drawY) < 0.5) npcReplay.drawY = targetY;
 
@@ -2286,37 +2311,48 @@ function drawNpcOverlay() {
 }
 
 function drawOverlay() {
+    const cx = CANVAS_W / 2;
+    const cy = CANVAS_H / 2;
     if (gameState === 'LEVEL_COMPLETE') {
+        const r = levelResult || { moves, par: parMoves, bonus: 0, stars: 1, tileScore: cleaned * 10 };
         ctx.save();
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
         ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+        ctx.textAlign = 'center';
 
         ctx.fillStyle = '#4CAF50';
         ctx.font = 'bold 40px Segoe UI, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText('Level Complete!', CANVAS_W / 2, CANVAS_H / 2 - 40);
+        ctx.fillText('Level Complete!', cx, cy - 105);
 
+        ctx.fillStyle = '#FFD600';
+        ctx.font = '36px Segoe UI, sans-serif';
+        ctx.fillText('★'.repeat(r.stars) + '☆'.repeat(3 - r.stars), cx, cy - 58);
+
+        const diff = r.par - r.moves;
+        const parText = diff > 0 ? `${diff} under par` : diff < 0 ? `${-diff} over par` : 'exactly par';
         ctx.fillStyle = '#FFF';
         ctx.font = '20px Segoe UI, sans-serif';
-        ctx.fillText(`Score: ${score}`, CANVAS_W / 2, CANVAS_H / 2 + 10);
-        ctx.fillText(`Moves: ${moves}`, CANVAS_W / 2, CANVAS_H / 2 + 40);
+        ctx.fillText(`Moves ${r.moves}   ·   Par ${r.par}   ·   ${parText}`, cx, cy - 18);
 
-        // Watch par route option
+        ctx.fillStyle = '#DDD';
+        ctx.font = '17px Segoe UI, sans-serif';
+        ctx.fillText(`Tiles ${r.tileScore}  +  Bonus ${r.bonus}  =  ${score} total`, cx, cy + 12);
+
         ctx.fillStyle = '#00BFFF';
         ctx.font = '16px Segoe UI, sans-serif';
-        ctx.fillText('Press W to watch the NPC par route', CANVAS_W / 2, CANVAS_H / 2 + 75);
+        ctx.fillText('W: watch the ghost run the par route', cx, cy + 58);
 
         if (currentLevel < LEVELS.length - 1) {
             ctx.fillStyle = '#A0C4FF';
             ctx.font = '18px Segoe UI, sans-serif';
-            ctx.fillText('Press SPACE or click for Next Level', CANVAS_W / 2, CANVAS_H / 2 + 105);
+            ctx.fillText('SPACE or click the board: next level', cx, cy + 90);
         } else {
             ctx.fillStyle = '#FFD600';
             ctx.font = 'bold 28px Segoe UI, sans-serif';
-            ctx.fillText('You Win! All levels complete!', CANVAS_W / 2, CANVAS_H / 2 + 105);
+            ctx.fillText('You Win! All levels complete!', cx, cy + 98);
             ctx.font = '16px Segoe UI, sans-serif';
             ctx.fillStyle = '#CCC';
-            ctx.fillText('Press R to play again', CANVAS_W / 2, CANVAS_H / 2 + 135);
+            ctx.fillText('Press R to play again', cx, cy + 128);
         }
 
         ctx.restore();
@@ -2328,15 +2364,97 @@ function drawOverlay() {
         ctx.fillStyle = '#F44336';
         ctx.font = 'bold 40px Segoe UI, sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText('Out of Battery!', CANVAS_W / 2, CANVAS_H / 2 - 20);
+        ctx.fillText('Out of Battery!', cx, cy - 20);
 
         ctx.fillStyle = '#FFF';
         ctx.font = '18px Segoe UI, sans-serif';
-        ctx.fillText('Return to the charger next time!', CANVAS_W / 2, CANVAS_H / 2 + 20);
-        ctx.fillText('Press R to restart', CANVAS_W / 2, CANVAS_H / 2 + 50);
+        ctx.fillText('Get back to the dock before it runs out next time.', cx, cy + 20);
+        ctx.fillText('Press R or tap Restart', cx, cy + 50);
 
         ctx.restore();
     }
+}
+
+// Level-name banner shown for the first few seconds of a level
+function drawBanner() {
+    if (bannerTimer <= 0 || helpVisible) return;
+    const elapsed = BANNER_MS - bannerTimer;
+    const alpha = Math.max(0, Math.min(1, elapsed / 250, bannerTimer / 500));
+    const cx = CANVAS_W / 2;
+    const showGoal = currentLevel === 0;
+    const boxW = 400;
+    const boxH = showGoal ? 100 : 76;
+    const y = 64;
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(20, 20, 28, 0.84)';
+    roundRect(ctx, cx - boxW / 2, y, boxW, boxH, 10);
+    ctx.fill();
+    ctx.fillStyle = '#9ED8CC';
+    ctx.font = 'bold 13px Segoe UI, sans-serif';
+    ctx.fillText(`LEVEL ${currentLevel + 1} OF ${LEVELS.length}`, cx, y + 26);
+    ctx.fillStyle = '#FFF';
+    ctx.font = 'bold 28px Segoe UI, sans-serif';
+    ctx.fillText(bannerText, cx, y + 58);
+    if (showGoal) {
+        ctx.fillStyle = '#CCC';
+        ctx.font = '13px Segoe UI, sans-serif';
+        ctx.fillText('Clean every tile  ·  dock before the battery dies  ·  beat par', cx, y + 84);
+    }
+    ctx.restore();
+}
+
+// Full-screen help, toggled with H or ?
+function drawHelp() {
+    const lines = [
+        ['Goal', 'Clean every tile. The dock refills the battery. Finishing under par earns a bigger bonus.'],
+        ['Move', 'Arrow keys or WASD. Hold a key to keep going. The on-screen d-pad works the same way.'],
+        ['3D view', 'V or the 3D View button. In 3D, left and right turn in place; up and down drive forward and back.'],
+        ['Restart', 'R or the Restart button. Restarting a level also restarts its score.'],
+        ['Next level', 'SPACE, or click the board, once a level is complete.'],
+        ['Ghost', 'W on the Level Complete screen replays the par route. SPACE skips the replay.'],
+        ['Help', 'H or ? shows this screen. Escape closes it.'],
+    ];
+    ctx.save();
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+    ctx.fillStyle = '#FFF';
+    ctx.font = 'bold 30px Segoe UI, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('How to play', CANVAS_W / 2, 64);
+    ctx.textAlign = 'left';
+    let y = 112;
+    for (const [key, text] of lines) {
+        ctx.fillStyle = '#9ED8CC';
+        ctx.font = 'bold 15px Segoe UI, sans-serif';
+        ctx.fillText(key, 56, y);
+        ctx.fillStyle = '#EEE';
+        ctx.font = '15px Segoe UI, sans-serif';
+        wrapText(text, 160, y, CANVAS_W - 216, 20);
+        y += 58;
+    }
+    ctx.fillStyle = '#AAA';
+    ctx.font = '13px Segoe UI, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Press H, ? or Escape to close', CANVAS_W / 2, CANVAS_H - 22);
+    ctx.restore();
+}
+
+function wrapText(text, x, y, maxWidth, lineHeight) {
+    let line = '';
+    for (const word of text.split(' ')) {
+        const test = line ? `${line} ${word}` : word;
+        if (line && ctx.measureText(test).width > maxWidth) {
+            ctx.fillText(line, x, y);
+            y += lineHeight;
+            line = word;
+        } else {
+            line = test;
+        }
+    }
+    if (line) ctx.fillText(line, x, y);
 }
 
 function roundRect(ctx, x, y, w, h, r) {
@@ -2359,7 +2477,7 @@ function updateUI() {
     elMoves.textContent = moves;
     elParCount.textContent = parMoves;
     elScore.textContent = score;
-    elLevelNum.textContent = currentLevel + 1;
+    elLevelNum.textContent = `${currentLevel + 1} · ${LEVELS[currentLevel].name}`;
 
     const pct = roomba.battery;
     elBatteryFill.style.width = pct + '%';
@@ -2400,13 +2518,14 @@ function renderFirstPerson() {
     // Update smooth position (normally done in drawRoomba, which is skipped in FP mode)
     const targetX = roomba.col * TILE + TILE / 2;
     const targetY = roomba.row * TILE + TILE / 2;
-    roomba.drawX += (targetX - roomba.drawX) * 0.3;
-    roomba.drawY += (targetY - roomba.drawY) * 0.3;
+    const fpLerp = easeK(0.3);
+    roomba.drawX += (targetX - roomba.drawX) * fpLerp;
+    roomba.drawY += (targetY - roomba.drawY) * fpLerp;
     if (Math.abs(targetX - roomba.drawX) < 0.5) roomba.drawX = targetX;
     if (Math.abs(targetY - roomba.drawY) < 0.5) roomba.drawY = targetY;
 
     // Smooth camera rotation
-    fpAngle = lerpAngle(fpAngle, fpTargetAngle, 0.22);
+    fpAngle = lerpAngle(fpAngle, fpTargetAngle, easeK(0.22));
 
     // Camera position (use smooth draw position)
     const camX = roomba.drawX / TILE;
@@ -2704,8 +2823,8 @@ for (let i = 0; i < 30; i++) {
 
 function drawDustMotes() {
     for (const m of dustMotes) {
-        m.y -= m.speed;
-        m.x += Math.sin(m.drift + chargerPulse * 0.006) * m.wobble;
+        m.y -= m.speed * dtFrames;
+        m.x += Math.sin(m.drift + chargerPulse * 0.006) * m.wobble * dtFrames;
         if (m.y < -5) { m.y = CANVAS_H + 5; m.x = Math.random() * CANVAS_W; }
         if (m.x < -5) m.x = CANVAS_W + 5;
         if (m.x > CANVAS_W + 5) m.x = -5;
@@ -2897,8 +3016,21 @@ function drawSunlight() {
     ctx.restore();
 }
 
-function render() {
+// Convert a per-60fps-frame ease factor into one for the real elapsed time
+function easeK(k) {
+    return 1 - Math.pow(1 - k, dtFrames);
+}
+
+function render(timestamp) {
+    if (!lastFrameTime) lastFrameTime = timestamp;
+    dtMs = Math.min(100, Math.max(0, timestamp - lastFrameTime)); // clamp so a hidden tab doesn't jump
+    lastFrameTime = timestamp;
+    dtFrames = dtMs / FRAME_MS;
+
     ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+
+    const fpActive = viewMode === 'FP' &&
+        (gameState === 'PLAYING' || gameState === 'LEVEL_COMPLETE' || gameState === 'GAME_OVER');
 
     if (gameState === 'PAR_REPLAY') {
         updateNpcReplay();
@@ -2911,7 +3043,7 @@ function render() {
         drawDustMotes();
         drawNpcVacuum();
         drawNpcOverlay();
-    } else if (viewMode === 'FP' && gameState === 'PLAYING') {
+    } else if (fpActive) {
         renderFirstPerson();
         drawOverlay();
     } else {
@@ -2926,8 +3058,12 @@ function render() {
         drawOverlay();
     }
 
-    if (bumpFlash > 0) bumpFlash--;
-    chargerPulse++;
+    drawBanner();
+    if (helpVisible) drawHelp();
+
+    if (bumpFlash > 0) bumpFlash = Math.max(0, bumpFlash - dtFrames);
+    chargerPulse += dtFrames;
+    if (bannerTimer > 0) bannerTimer -= dtMs;
 
     requestAnimationFrame(render);
 }
@@ -2936,6 +3072,7 @@ function render() {
 function nextLevel() {
     if (gameState === 'LEVEL_COMPLETE' && currentLevel < LEVELS.length - 1) {
         currentLevel++;
+        levelStartScore = score;
         initLevel(currentLevel);
     }
 }
@@ -2944,6 +3081,14 @@ function nextLevel() {
 document.addEventListener('DOMContentLoaded', () => {
     canvas = document.getElementById('gameCanvas');
     ctx = canvas.getContext('2d');
+
+    // Render at the display's native density so lines and text are crisp on 2x screens
+    canvasDpr = Math.min(window.devicePixelRatio || 1, 3);
+    canvas.width = Math.round(CANVAS_W * canvasDpr);
+    canvas.height = Math.round(CANVAS_H * canvasDpr);
+    canvas.style.width = CANVAS_W + 'px';
+    canvas.style.height = CANVAS_H + 'px';
+    ctx.setTransform(canvasDpr, 0, 0, canvasDpr, 0, 0);
 
     createFloorPatterns();
 
@@ -2956,14 +3101,19 @@ document.addEventListener('DOMContentLoaded', () => {
     elBtnRestart = document.getElementById('btnRestart');
     elParCount = document.getElementById('parCount');
     elBtnView = document.getElementById('btnViewToggle');
+    elBtnHelp = document.getElementById('btnHelp');
 
-    // View toggle button
+    // View toggle button (blur afterwards so Space/Enter don't re-trigger it)
     if (elBtnView) {
         elBtnView.addEventListener('click', () => {
-            if (gameState === 'PLAYING') {
-                viewMode = viewMode === 'TD' ? 'FP' : 'TD';
-                elBtnView.textContent = viewMode === 'FP' ? '2D View' : '3D View';
-            }
+            toggleView();
+            elBtnView.blur();
+        });
+    }
+    if (elBtnHelp) {
+        elBtnHelp.addEventListener('click', () => {
+            toggleHelp();
+            elBtnHelp.blur();
         });
     }
 
@@ -2988,16 +3138,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Restart button
     elBtnRestart.addEventListener('click', () => {
-        initLevel(currentLevel);
+        restartLevel();
+        elBtnRestart.blur();
     });
 
-    // Canvas click for next level
+    // Canvas click: close help, or go to the next level
     canvas.addEventListener('click', () => {
-        if (gameState === 'LEVEL_COMPLETE') {
+        if (helpVisible) {
+            toggleHelp();
+        } else if (gameState === 'LEVEL_COMPLETE') {
             nextLevel();
         }
     });
 
     initLevel(0);
-    render();
+    requestAnimationFrame(render);
 });
