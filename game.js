@@ -404,7 +404,23 @@ const keyMap = {
     W: 'up', S: 'down', A: 'left', D: 'right',
 };
 
+// Keys pressed inside the design panel (colour wheels, the flashlight switch) belong to it
+function keyIsForDesignPanel(e) {
+    return !!(e.target && e.target.closest && e.target.closest('#designPanel'));
+}
+
 document.addEventListener('keydown', (e) => {
+    if (keyIsForDesignPanel(e)) return;
+
+    // F: flashlight on / off
+    if (e.key === 'f' || e.key === 'F') {
+        if (typeof toggleFlashlight === 'function') {
+            toggleFlashlight();
+            sound('turn');
+        }
+        return;
+    }
+
     // H or ? toggles the help screen; Escape closes it; nothing else gets through while it is up
     if (e.key === 'h' || e.key === 'H' || e.key === '?') {
         e.preventDefault();
@@ -467,6 +483,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 document.addEventListener('keyup', (e) => {
+    if (keyIsForDesignPanel(e)) return;
     const dir = keyMap[e.key];
     if (dir) {
         keysDown.delete(e.key);
@@ -653,6 +670,7 @@ function renderFrame(timestamp) {
         drawRoomVignette();
         drawSunlight();
         drawDustMotes();
+        drawFlashlight2D();
         drawRoomba();
         drawOverlay();
     }
@@ -771,6 +789,10 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     loadProgress();
+    if (typeof designLoad === 'function') {
+        designLoad();
+        initDesignUI();
+    }
     currentLevel = progress.unlocked; // resume at the furthest level reached
     initLevel(currentLevel);
     updateViewButtons();

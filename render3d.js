@@ -314,6 +314,19 @@ function initFirstPerson() {
         }
     }
 
+    // Flashlight: a cone across the screen (brightest at the centre column) times a distance falloff
+    const cone = new Float32Array(FP_W);
+    for (let x = 0; x < FP_W; x++) {
+        const cx = (2 * x) / FP_W - 1;
+        cone[x] = Math.exp(-(cx * cx) / 0.14);
+    }
+    const floorLight = new Float32Array(FP_H);
+    const ceilLight = new Float32Array(FP_H);
+    for (let y = 0; y < FP_H; y++) {
+        if (y > FP_HORIZON) floorLight[y] = fpLightFalloff(floorDist[y]);
+        else if (y < FP_HORIZON) ceilLight[y] = fpLightFalloff(ceilDist[y]) * 0.45; // a low lamp lights the floor more
+    }
+
     fp3d = {
         canvas: c,
         ctx: t,
@@ -321,6 +334,7 @@ function initFirstPerson() {
         buf: new Uint32Array(image.data.buffer),
         tex: fpBuildTextures(),
         floorDist, ceilDist, floorFog, ceilFog,
+        cone, floorLight, ceilLight,
         hits: [],
         sprites: [],      // projected sprites for the current frame
         colSprites: [],   // the ones covering the column being drawn
@@ -349,8 +363,18 @@ function fpLevelSprites() {
     return fp3d.levelSprites;
 }
 
-// Shade a packed 0xRRGGBB texel: multiply by `shade`, blend toward fog by `fog`, return ABGR for the buffer
-function fpShade(rgb, shade, fog) {
+// Flashlight state for the frame being drawn (set in fpRenderScene from the design settings)
+const fpLight = { on: false, dim: 1, r: 0, g: 0, b: 0 };
+const FP_LIGHT_GAIN = 1.15;
+
+function fpLightFalloff(d) {
+    return 1 / (1 + 0.45 * d * d);
+}
+
+// Shade a packed 0xRRGGBB texel: multiply by `shade` (and the flashlight's room dim), blend toward
+// fog by `fog`, add `lit` times the flashlight colour, return ABGR for the buffer
+function fpShade(rgb, shade, fog, lit) {
+    shade *= fpLight.dim;
     let r = ((rgb >> 16) & 255) * shade;
     let g = ((rgb >> 8) & 255) * shade;
     let b = (rgb & 255) * shade;
@@ -358,6 +382,11 @@ function fpShade(rgb, shade, fog) {
         r += (FP_FOG[0] - r) * fog;
         g += (FP_FOG[1] - g) * fog;
         b += (FP_FOG[2] - b) * fog;
+    }
+    if (lit > 0) {
+        r += fpLight.r * lit;
+        g += fpLight.g * lit;
+        b += fpLight.b * lit;
     }
     if (r > 255) r = 255;
     if (g > 255) g = 255;
@@ -446,6 +475,17 @@ function fpRenderScene(view) {
     const aheadCol = view.aheadCol, aheadRow = view.aheadRow;
     const T = FP_TEX, TM = FP_TEX - 1;
 
+    // Flashlight for this frame (the ghost has none)
+    const lightOn = !view.ghost && typeof design !== 'undefined' && design.flashOn;
+    fpLight.on = lightOn;
+    fpLight.dim = lightOn ? 0.6 : 1;
+    if (lightOn) {
+        fpLight.r = design.flashRgb[0];
+        fpLight.g = design.flashRgb[1];
+        fpLight.b = design.flashRgb[2];
+    }
+    const cone = fp3d.cone, floorLight = fp3d.floorLight, ceilLight = fp3d.ceilLight;
+
     // Project this frame's sprites to screen space, farthest first
     const sprites = fp3d.sprites;
     sprites.length = 0;
@@ -467,6 +507,7 @@ function fpRenderScene(view) {
             bot: horizon + eyeS / ty,
             tex: tex[s.texKey],
             fog: Math.min(FP_FOG_MAX, ty * FP_FOG_PER_TILE),
+            light: lightOn ? fpLightFalloff(ty) * FP_LIGHT_GAIN : 0,
         });
     }
     sprites.sort((a, b) => b.depth - a.depth);
@@ -478,11 +519,12 @@ function fpRenderScene(view) {
         const hgt = s.bot - s.top;
         const y0 = Math.max(0, Math.ceil(s.top));
         const y1 = Math.min(H - 1, Math.floor(s.bot));
+        const lit = s.light * cone[x];
         for (let y = y0; y <= y1; y++) {
             const tv = (((y - s.top) / hgt) * TM) | 0;
             const texel = texture[tv * T + u];
             if (texel >>> 24 < 128) continue; // transparent
-            buf[y * W + x] = fpShade(texel, 1.0, s.fog);
+            buf[y * W + x] = fpShade(texel, 1.0, s.fog, lit);
         }
     };
 
@@ -490,6 +532,7 @@ function fpRenderScene(view) {
         const cameraX = (2 * x) / W - 1;
         const rayDirX = dirX + planeX * cameraX;
         const rayDirY = dirY + planeY * cameraX;
+        const coneX = lightOn ? cone[x] * FP_LIGHT_GAIN : 0;
 
         // Floor: every row below the horizon, textured by the tile the ray lands on
         for (let y = horizon + 1; y < H; y++) {
@@ -507,7 +550,7 @@ function fpRenderScene(view) {
             const tv = ((fy - tr) * TM) | 0;
             let shade = (tc + tr) & 1 ? 0.95 : 1.0; // faint checker so tiles can be counted
             if (tc === aheadCol && tr === aheadRow) shade = 1.18; // the tile a forward press reaches
-            buf[y * W + x] = fpShade(texture[tv * T + tu], shade, floorFog[y]);
+            buf[y * W + x] = fpShade(texture[tv * T + tu], shade, floorFog[y], coneX * floorLight[y]);
         }
 
         // Ceiling: rows above the horizon
@@ -517,7 +560,7 @@ function fpRenderScene(view) {
             const fy = camY + rayDirY * d;
             const tu = ((fx - Math.floor(fx)) * TM) | 0;
             const tv = ((fy - Math.floor(fy)) * TM) | 0;
-            buf[y * W + x] = fpShade(tex.ceiling[tv * T + tu], 1.0, ceilFog[y]);
+            buf[y * W + x] = fpShade(tex.ceiling[tv * T + tu], 1.0, ceilFog[y], coneX * ceilLight[y]);
         }
         buf[horizon * W + x] = fogPacked;
 
@@ -580,16 +623,17 @@ function fpRenderScene(view) {
             const fog = Math.min(FP_FOG_MAX, d * FP_FOG_PER_TILE);
             const shade = hit.side === 1 ? 0.78 : 1.0;
             const tu = (hit.u * TM) | 0;
+            const lit = coneX > 0 ? coneX * fpLightFalloff(d) : 0;
             for (let y = y0; y <= y1; y++) {
                 const tv = (((y - top) / faceH) * TM) | 0;
-                buf[y * W + x] = fpShade(texture[tv * T + tu], y === y0 ? shade * 0.75 : shade, fog);
+                buf[y * W + x] = fpShade(texture[tv * T + tu], y === y0 ? shade * 0.75 : shade, fog, lit);
             }
             // Top face of anything lower than the eye
             if (hit.h < FP_EYE && hit.dExit > 0) {
                 const topFar = horizon - ((hit.h - FP_EYE) * FP_SCALE) / hit.dExit;
                 const ya = Math.max(0, Math.ceil(topFar));
                 const yb = Math.min(H - 1, Math.floor(top));
-                const c = fpShade(texture.avg, 1.25, fog);
+                const c = fpShade(texture.avg, 1.25, fog, lit);
                 for (let y = ya; y < yb; y++) buf[y * W + x] = c;
             }
             // Underside of a raised slab
@@ -597,7 +641,7 @@ function fpRenderScene(view) {
                 const botFar = horizon - ((hit.hb - FP_EYE) * FP_SCALE) / hit.dExit;
                 const ya = Math.max(0, Math.ceil(bot));
                 const yb = Math.min(H - 1, Math.floor(botFar));
-                const c = fpShade(texture.avg, 0.45, fog);
+                const c = fpShade(texture.avg, 0.45, fog, lit * 0.5);
                 for (let y = ya; y < yb; y++) buf[y * W + x] = c;
             }
         }
@@ -660,6 +704,19 @@ function fpDrawStatus() {
     ctx.fillStyle = needsDock ? '#FF6B5B' : '#C8E8FF';
     const dockText = dockDist < 0 ? 'Dock unreachable' : dockDist === 0 ? 'On the dock' : `Dock ${dockDist} move${dockDist === 1 ? '' : 's'}`;
     ctx.fillText(needsDock ? `${dockText}  ·  head back!` : dockText, 20, 43);
+
+    // Flashlight indicator
+    if (design.flashOn) {
+        const [fr, fg, fb] = design.flashRgb;
+        ctx.save();
+        ctx.shadowColor = `rgb(${fr},${fg},${fb})`;
+        ctx.shadowBlur = 8;
+        ctx.fillStyle = `rgb(${fr},${fg},${fb})`;
+        ctx.beginPath();
+        ctx.arc(148, 24, 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
 
     // Top-right: battery bar
     const bw = 130, bh = 12, bx = CANVAS_W - bw - 14, by = 14;
@@ -764,7 +821,7 @@ function fpDrawBumper(shakeX, shakeY) {
     ctx.beginPath();
     ctx.arc(cx, cy, r, Math.PI, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = bumpFlash > 0 ? `rgba(255, 82, 82, ${0.5 + bumpFlash / 20})` : '#1A9A8A';
+    ctx.strokeStyle = bumpFlash > 0 ? `rgba(255, 82, 82, ${0.5 + bumpFlash / 20})` : design.lightColor;
     ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.arc(cx, cy, r - 7, Math.PI * 1.12, Math.PI * 1.88);
@@ -775,6 +832,17 @@ function fpDrawBumper(shakeX, shakeY) {
         ctx.beginPath();
         ctx.arc(cx + Math.cos(a) * (r - 2), cy + Math.sin(a) * (r - 2), 2, 0, Math.PI * 2);
         ctx.fill();
+    }
+    // Headlight lens, glowing when the flashlight is on
+    if (design.flashOn) {
+        const [fr, fg, fb] = design.flashRgb;
+        ctx.shadowColor = `rgb(${fr},${fg},${fb})`;
+        ctx.shadowBlur = 22;
+        ctx.fillStyle = `rgb(${Math.min(255, fr + 50)},${Math.min(255, fg + 50)},${Math.min(255, fb + 50)})`;
+        ctx.beginPath();
+        ctx.ellipse(cx, cy - r + 11, 14, 5, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
     }
     ctx.restore();
 }

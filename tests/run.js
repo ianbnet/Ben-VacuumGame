@@ -59,7 +59,7 @@ const sandbox = {
 };
 sandbox.window = sandbox;
 vm.createContext(sandbox);
-for (const f of ['core.js', 'game.js']) {
+for (const f of ['core.js', 'design.js', 'game.js']) {
     vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), sandbox, { filename: f });
 }
 const G = (expr) => vm.runInContext(expr, sandbox);
@@ -199,6 +199,30 @@ G('progress.unlocked = 5; selectLevel(3)');
 check(G('currentLevel') === 3 && G('score') === 0 && G('levelStartScore') === 0, 'jumping to a level starts a fresh run');
 G('selectLevel(3); tryMove(0, 1); selectLevel(3)');
 check(G('score') === 0, 'selecting the current level restarts it');
+
+section('Vacuum design');
+check(G('hsvToHex(0, 1, 1)') === '#FF0000' && G('hsvToHex(120, 1, 1)') === '#00FF00' && G('hsvToHex(240, 1, 1)') === '#0000FF', 'hue to hex at the primaries');
+check(G('hsvToHex(0, 0, 1)') === '#FFFFFF', 'zero saturation is white');
+const rt = G('hexToHsv("#1A9A8A")');
+check(Math.abs(rt.h - 172.5) < 1 && Math.abs(rt.s - 0.831) < 0.01 && Math.abs(rt.v - 0.604) < 0.01, 'hex to hsv round trip values');
+check(G('hsvToHex(hexToHsv("#FFE2A8").h, hexToHsv("#FFE2A8").s, 1)') === '#FFE2A8', 'wheel colours survive a round trip at full brightness');
+check(G('isHexColor("#abcdef") && !isHexColor("abcdef") && !isHexColor("#abcd") && !isHexColor(42)'), 'hex validation');
+G('designReset()');
+check(G('design.lightColor') === '#1A9A8A' && G('design.flashOn') === false, 'defaults');
+G('setLightColor("#ff00aa"); toggleFlashlight(); setFlashColor("#00ffcc")');
+check(G('design.lightColor') === '#FF00AA' && G('design.flashOn') === true && G('design.flashColor') === '#00FFCC', 'setters normalise and apply');
+check(G('design.lightRgb[0]') === 255 && G('design.lightRgb[1]') === 0 && G('design.lightRgb[2]') === 170, 'derived rgb follows the colour');
+const savedDesign = JSON.parse(storage.get('ben-vacuum-game.design.v1'));
+check(savedDesign.lightColor === '#FF00AA' && savedDesign.flashOn === true && savedDesign.flashColor === '#00FFCC', 'design is written to storage');
+G('design.lightColor = "#000000"; design.flashOn = false; designLoad()');
+check(G('design.lightColor') === '#FF00AA' && G('design.flashOn') === true, 'design is read back from storage');
+G('designReset()');
+storage.set('ben-vacuum-game.design.v1', JSON.stringify({ lightColor: 'red', flashOn: 'yes', flashColor: 12 }));
+G('designLoad()');
+check(G('design.lightColor') === '#1A9A8A' && G('design.flashColor') === '#FFE2A8' && G('design.flashOn') === true, 'bad stored colours are ignored, the switch is coerced');
+G('setLightColor("not a colour")');
+check(G('design.lightColor') === '#1A9A8A', 'an invalid colour is rejected');
+G('designReset()');
 
 console.log(`\n${passes} passed, ${failures} failed`);
 process.exit(failures ? 1 : 0);

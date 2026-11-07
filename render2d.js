@@ -1061,11 +1061,12 @@ function drawRoomba() {
         ctx.fill();
     }
 
-    // Top plate accent ring - teal (iRobot style)
+    // Top plate accent ring, in the player's chosen light colour
+    const lightHex = design.lightColor;
     const accentGrad = ctx.createLinearGradient(-r, 0, r, 0);
-    accentGrad.addColorStop(0, '#147A6D');
-    accentGrad.addColorStop(0.5, '#1A9A8A');
-    accentGrad.addColorStop(1, '#147A6D');
+    accentGrad.addColorStop(0, shadeColor(lightHex, -24));
+    accentGrad.addColorStop(0.5, lightHex);
+    accentGrad.addColorStop(1, shadeColor(lightHex, -24));
     ctx.strokeStyle = accentGrad;
     ctx.lineWidth = 2.5;
     ctx.beginPath();
@@ -1082,7 +1083,7 @@ function drawRoomba() {
     ctx.fill();
 
     // Direction indicator - front brush opening
-    ctx.fillStyle = '#1A8A7D';
+    ctx.fillStyle = shadeColor(lightHex, -10);
     ctx.beginPath();
     ctx.arc(0, 0, r - 7, angle - 0.5, angle + 0.5);
     ctx.lineTo(Math.cos(angle) * 3, Math.sin(angle) * 3);
@@ -1129,20 +1130,20 @@ function drawRoomba() {
     ctx.restore();
     ctx.restore();
 
-    // Center CLEAN button with glow
+    // Center CLEAN button with glow: the light colour normally, red when the battery is low
     ctx.save();
     if (roomba.battery > 20) {
-        ctx.shadowColor = '#4CAF50';
-        ctx.shadowBlur = 6;
+        ctx.shadowColor = lightHex;
+        ctx.shadowBlur = 8;
     } else {
         ctx.shadowColor = '#F44336';
         ctx.shadowBlur = 6;
     }
     const btnGrad = ctx.createRadialGradient(0, -1, 0, 0, 0, 6);
     if (roomba.battery > 20) {
-        btnGrad.addColorStop(0, '#5CBF60');
-        btnGrad.addColorStop(0.6, '#4CAF50');
-        btnGrad.addColorStop(1, '#2E7D32');
+        btnGrad.addColorStop(0, shadeColor(lightHex, 60));
+        btnGrad.addColorStop(0.6, lightHex);
+        btnGrad.addColorStop(1, shadeColor(lightHex, -50));
     } else {
         btnGrad.addColorStop(0, '#FF5252');
         btnGrad.addColorStop(0.6, '#F44336');
@@ -1206,6 +1207,74 @@ function drawRoomba() {
     ctx.fill();
     ctx.restore();
 
+    // Headlight lens on the bumper when the flashlight is on
+    if (design.flashOn) {
+        const [fr, fg, fb] = design.flashRgb;
+        ctx.save();
+        ctx.rotate(angle);
+        ctx.shadowColor = `rgb(${fr},${fg},${fb})`;
+        ctx.shadowBlur = 14;
+        ctx.fillStyle = `rgb(${Math.min(255, fr + 60)},${Math.min(255, fg + 60)},${Math.min(255, fb + 60)})`;
+        ctx.beginPath();
+        ctx.ellipse(r - 1, 0, 2.5, 4, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+
+    ctx.restore();
+}
+
+// Flashlight beam on the board: a cone ahead of the Roomba, stopped by furniture and walls,
+// drawn additively over a slightly dimmed room so it reads as light.
+function drawFlashlight2D() {
+    if (!design.flashOn) return;
+    const [fr, fg, fb] = design.flashRgb;
+    const ang = FP_ANGLE_MAP[roomba.dir];
+    const ox = roomba.drawX, oy = roomba.drawY;
+    const halfAngle = 0.4;          // radians, about 23 degrees each side
+    const maxLen = 3.8 * TILE;
+    const step = TILE * 0.1;
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.24)';
+    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+
+    // Beam outline: march a fan of rays until each hits something
+    const rays = 19;
+    const pts = [];
+    for (let i = 0; i < rays; i++) {
+        const a = ang - halfAngle + ((2 * halfAngle) * i) / (rays - 1);
+        const dx = Math.cos(a), dy = Math.sin(a);
+        let len = 0;
+        while (len < maxLen) {
+            const px = ox + dx * (len + step), py = oy + dy * (len + step);
+            const c = Math.floor(px / TILE), r = Math.floor(py / TILE);
+            if (c < 0 || c >= COLS || r < 0 || r >= ROWS || grid[r][c] === OBSTACLE) break;
+            len += step;
+        }
+        pts.push([ox + dx * len, oy + dy * len]);
+    }
+
+    ctx.globalCompositeOperation = 'lighter';
+    const beam = ctx.createRadialGradient(ox, oy, 4, ox, oy, maxLen);
+    beam.addColorStop(0, `rgba(${fr},${fg},${fb},0.6)`);
+    beam.addColorStop(0.45, `rgba(${fr},${fg},${fb},0.28)`);
+    beam.addColorStop(1, `rgba(${fr},${fg},${fb},0)`);
+    ctx.fillStyle = beam;
+    ctx.beginPath();
+    ctx.moveTo(ox, oy);
+    for (const [x, y] of pts) ctx.lineTo(x, y);
+    ctx.closePath();
+    ctx.fill();
+
+    // Soft pool right in front of the lens
+    const pool = ctx.createRadialGradient(ox, oy, 0, ox, oy, TILE * 0.9);
+    pool.addColorStop(0, `rgba(${fr},${fg},${fb},0.35)`);
+    pool.addColorStop(1, `rgba(${fr},${fg},${fb},0)`);
+    ctx.fillStyle = pool;
+    ctx.beginPath();
+    ctx.arc(ox, oy, TILE * 0.9, 0, Math.PI * 2);
+    ctx.fill();
     ctx.restore();
 }
 
@@ -1564,6 +1633,8 @@ function drawHelp() {
         ['Restart', 'R or the Restart button. Restarting a level also restarts its score.'],
         ['Next level', 'SPACE, or click the board, once a level is complete.'],
         ['Ghost', 'W on the Level Complete screen replays the par route; V rides along in 3D. SPACE skips it.'],
+        ['Flashlight', 'F switches the vacuum\'s flashlight on and off. It lights the way ahead in both views.'],
+        ['Design', 'The Design button opens colour wheels for the vacuum\'s lights and the flashlight.'],
         ['Sound', 'M or the Sound button mutes and unmutes.'],
         ['Help', 'H or ? shows this screen. Escape closes it.'],
     ];
@@ -1575,15 +1646,15 @@ function drawHelp() {
     ctx.textAlign = 'center';
     ctx.fillText('How to play', CANVAS_W / 2, 64);
     ctx.textAlign = 'left';
-    let y = 108;
+    let y = 100;
     for (const [key, text] of lines) {
         ctx.fillStyle = '#9ED8CC';
-        ctx.font = 'bold 15px Segoe UI, sans-serif';
+        ctx.font = 'bold 14px Segoe UI, sans-serif';
         ctx.fillText(key, 56, y);
         ctx.fillStyle = '#EEE';
-        ctx.font = '15px Segoe UI, sans-serif';
-        wrapText(text, 160, y, CANVAS_W - 216, 20);
-        y += 52;
+        ctx.font = '14px Segoe UI, sans-serif';
+        wrapText(text, 160, y, CANVAS_W - 216, 18);
+        y += 44;
     }
     ctx.fillStyle = '#AAA';
     ctx.font = '13px Segoe UI, sans-serif';

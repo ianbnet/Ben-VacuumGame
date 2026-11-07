@@ -54,13 +54,36 @@
                 <button id="btnRestart" class="action-btn">Restart</button>
                 <button id="btnHelp" class="action-btn action-btn-quiet">Help</button>
                 <button id="btnMute" class="action-btn action-btn-quiet" aria-pressed="false">Sound on</button>
+                <button id="btnDesign" class="action-btn action-btn-quiet" aria-expanded="false" aria-controls="designPanel">Design</button>
             </div>
         </div>
-        <div id="legend">Arrows / WASD move (hold to keep going) &middot; V 3D view &middot; R restart &middot; Space next level &middot; W ghost &middot; M sound &middot; H help</div>
+        <div id="designPanel" class="design-panel" hidden>
+            <div class="design-head">
+                <span class="stat-label">Vacuum design</span>
+                <div>
+                    <button id="btnDesignReset" class="action-btn action-btn-quiet">Reset</button>
+                    <button id="btnDesignClose" class="action-btn action-btn-quiet">Close</button>
+                </div>
+            </div>
+            <div class="design-row">
+                <div class="design-field" id="lightsField">
+                    <span class="field-label">Vacuum lights</span>
+                    <canvas id="wheelLights" class="color-wheel" width="110" height="110" tabindex="0" role="slider" aria-label="Vacuum light colour"></canvas>
+                    <span class="swatch-row"><span id="swatchLights" class="swatch"></span><span id="hexLights">#1A9A8A</span></span>
+                </div>
+                <div class="design-field" id="flashField">
+                    <label class="switch field-label"><input type="checkbox" id="flashToggle"><span class="track" aria-hidden="true"></span><span>Flashlight</span></label>
+                    <canvas id="wheelFlash" class="color-wheel" width="110" height="110" tabindex="0" role="slider" aria-label="Flashlight colour"></canvas>
+                    <span class="swatch-row"><span id="swatchFlash" class="swatch"></span><span id="hexFlash">#FFE2A8</span></span>
+                </div>
+            </div>
+        </div>
+        <div id="legend">Arrows / WASD move (hold to keep going) &middot; V 3D view &middot; F flashlight &middot; R restart &middot; Space next level &middot; W ghost &middot; M sound &middot; H help</div>
         <div id="levelSelect" role="group" aria-label="Level select"></div>
         <div id="srStatus" class="visually-hidden" aria-live="polite"></div>
     </div>
     <script src="core.js"></script>
+    <script src="design.js"></script>
     <script src="render2d.js"></script>
     <script src="render3d.js"></script>
     <script src="audio.js"></script>
