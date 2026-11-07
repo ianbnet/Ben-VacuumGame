@@ -224,3 +224,182 @@ body {
     color: #8A8A96;
     letter-spacing: 0.4px;
 }
+
+/* === Responsive layout === */
+body {
+    overflow: auto;
+    align-items: flex-start;
+    min-height: 100dvh;
+    padding: 12px 0 24px;
+}
+
+#gameContainer {
+    width: min(720px, 100vw - 24px);
+}
+
+#gameCanvas {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 720 / 576;
+}
+
+#controlPanel,
+#legend,
+#levelSelect {
+    width: 100%;
+}
+
+#controlPanel {
+    flex-wrap: wrap;
+}
+
+#dpad {
+    grid-template-columns: 56px 56px 56px;
+    grid-template-rows: 56px 56px 56px;
+}
+
+.dpad-btn {
+    width: 56px;
+    height: 56px;
+    touch-action: none;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.dpad-center {
+    width: 30px;
+    height: 30px;
+}
+
+#dockDist.warn {
+    color: #FF6B5B;
+}
+
+#batteryText.low,
+#batteryFill.low {
+    animation: battery-pulse 0.9s ease-in-out infinite;
+}
+
+@keyframes battery-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.45; }
+}
+
+/* Level select row */
+#levelSelect {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+}
+
+#levelSelect .level-label {
+    font-size: 11px;
+    color: #8A8A96;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-right: 4px;
+}
+
+.level-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 44px;
+    padding: 4px 8px;
+    border: 1px solid #555;
+    border-radius: 6px;
+    background: #3A3A4A;
+    color: #FFF;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    line-height: 1.1;
+}
+
+.level-btn .level-stars {
+    font-size: 9px;
+    color: #FFD600;
+    letter-spacing: 1px;
+}
+
+.level-btn.current {
+    border-color: #1A7A6D;
+    background: #1A7A6D;
+}
+
+.level-btn:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+
+.action-btn:focus-visible,
+.dpad-btn:focus-visible,
+.level-btn:focus-visible {
+    outline: 2px solid #9ED8CC;
+    outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    #batteryText.low,
+    #batteryFill.low {
+        animation: none;
+    }
+}
+
+@media (max-width: 640px) {
+    #gameTitle {
+        font-size: 18px;
+    }
+
+    #controlPanel {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+        padding: 10px 12px;
+    }
+
+    #statsPanel {
+        flex-direction: row;
+        justify-content: space-between;
+        min-width: 0;
+    }
+
+    #rightPanel {
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        min-width: 0;
+    }
+
+    #batteryContainer {
+        width: 46%;
+        align-items: flex-start;
+    }
+
+    #dpadContainer {
+        order: 3;
+    }
+
+    #dpad {
+        grid-template-columns: 68px 68px 68px;
+        grid-template-rows: 68px 68px 68px;
+    }
+
+    .dpad-btn {
+        width: 68px;
+        height: 68px;
+        font-size: 24px;
+    }
+}
+
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+}

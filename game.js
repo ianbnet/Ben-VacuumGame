@@ -444,6 +444,12 @@ let dtFrames = 1;        // the same, in units of 60 fps frames
 let bannerText = '';
 let bannerTimer = 0;     // ms left to show the level banner
 let helpVisible = false;
+let chargerDistGrid = null; // BFS distance from every tile back to the dock, for the "dock N moves" hint
+let viewFade = 0;        // >0 while fading in after a 2D/3D switch
+
+// Saved progress (localStorage): highest level reached and the best result per level
+const SAVE_KEY = 'ben-vacuum-game.progress.v1';
+let progress = { unlocked: 0, best: {}, bestScore: 0 };
 
 // === FIRST-PERSON MODE ===
 let viewMode = 'TD'; // 'TD' = top-down, 'FP' = first-person
@@ -482,7 +488,8 @@ let holdInterval = null;
 let keysDown = new Set();
 
 // DOM elements
-let elCleaned, elMoves, elScore, elBatteryFill, elBatteryText, elLevelNum, elBtnRestart, elParCount, elBtnView, elBtnHelp;
+let elCleaned, elMoves, elScore, elBatteryFill, elBatteryText, elLevelNum, elBtnRestart, elParCount, elBtnView, elBtnHelp,
+    elDockDist, elSrStatus;
 
 // === INITIALIZATION ===
 function initLevel(levelIndex) {
@@ -548,7 +555,88 @@ function initLevel(levelIndex) {
     parApproachLen = parResult.approachLength;
     npcReplay.active = false;
 
+    // Obstacles never move, so the way home from every tile can be computed once
+    chargerDistGrid = bfsFromSource(grid, level.charger.col, level.charger.row);
+
+    buildLevelSelect();
     updateUI();
+}
+
+// --- Saved progress ---------------------------------------------------------
+
+function loadProgress() {
+    try {
+        const raw = localStorage.getItem(SAVE_KEY);
+        if (!raw) return;
+        const s = JSON.parse(raw);
+        if (s && typeof s === 'object') {
+            progress.unlocked = Math.min(LEVELS.length - 1, Math.max(0, s.unlocked | 0));
+            progress.best = s.best && typeof s.best === 'object' ? s.best : {};
+            progress.bestScore = s.bestScore | 0;
+        }
+    } catch (e) {
+        // Storage blocked or corrupt: play without saving
+    }
+}
+
+function saveProgress() {
+    try {
+        localStorage.setItem(SAVE_KEY, JSON.stringify(progress));
+    } catch (e) {
+        // Storage blocked: nothing to do
+    }
+}
+
+function recordLevelResult(levelIndex, result) {
+    const prev = progress.best[levelIndex];
+    progress.best[levelIndex] = {
+        moves: prev ? Math.min(prev.moves, result.moves) : result.moves,
+        stars: prev ? Math.max(prev.stars, result.stars) : result.stars,
+    };
+    progress.unlocked = Math.max(progress.unlocked, Math.min(levelIndex + 1, LEVELS.length - 1));
+    progress.bestScore = Math.max(progress.bestScore, score);
+    saveProgress();
+}
+
+// --- Level select ------------------------------------------------------------
+
+function buildLevelSelect() {
+    const el = document.getElementById('levelSelect');
+    if (!el) return;
+    el.innerHTML = '';
+    const label = document.createElement('span');
+    label.className = 'level-label';
+    label.textContent = 'Levels';
+    el.appendChild(label);
+    LEVELS.forEach((lv, i) => {
+        const b = document.createElement('button');
+        b.className = 'level-btn' + (i === currentLevel ? ' current' : '');
+        b.textContent = String(i + 1);
+        const best = progress.best[i];
+        b.title = best ? `${lv.name} · best ${best.moves} moves` : lv.name;
+        b.setAttribute('aria-label', `Level ${i + 1}: ${lv.name}${best ? `, best ${best.moves} moves` : ''}`);
+        b.disabled = i > progress.unlocked;
+        if (best) {
+            const s = document.createElement('span');
+            s.className = 'level-stars';
+            s.textContent = '★'.repeat(best.stars);
+            b.appendChild(s);
+        }
+        b.addEventListener('click', () => {
+            selectLevel(i);
+            b.blur();
+        });
+        el.appendChild(b);
+    });
+}
+
+function selectLevel(i) {
+    if (i < 0 || i >= LEVELS.length || i > progress.unlocked) return;
+    if (i !== currentLevel) levelStartScore = 0; // jumping to another level starts a fresh run
+    currentLevel = i;
+    npcReplay.active = false;
+    helpVisible = false;
+    initLevel(i);
 }
 
 // === INPUT HANDLING ===
@@ -615,6 +703,8 @@ function completeLevel() {
     levelResult = { moves, par: parMoves, bonus, stars, tileScore: cleaned * 10 };
     gameState = 'LEVEL_COMPLETE';
     stopHold();
+    recordLevelResult(currentLevel, levelResult);
+    buildLevelSelect();
 }
 
 // First person: left/right turn 90 degrees in place, up/down drive forward/back relative to facing.
@@ -680,12 +770,29 @@ function toggleView() {
     // Snap the camera to the Roomba's real facing so the two views never disagree
     fpTargetAngle = FP_ANGLE_MAP[roomba.dir];
     fpAngle = fpTargetAngle;
+    viewFade = 1;
     stopHold();
     updateViewButtons();
 }
 
+// The d-pad means something different in 3D (turn / drive), so say so on the buttons
 function updateViewButtons() {
-    if (elBtnView) elBtnView.textContent = viewMode === 'FP' ? '2D View' : '3D View';
+    const fp = viewMode === 'FP';
+    if (elBtnView) elBtnView.textContent = fp ? '2D View' : '3D View';
+    const btnLeft = document.getElementById('btnLeft');
+    const btnRight = document.getElementById('btnRight');
+    const btnUp = document.getElementById('btnUp');
+    const btnDown = document.getElementById('btnDown');
+    if (btnLeft) {
+        btnLeft.textContent = fp ? '↶' : '◀';
+        btnLeft.setAttribute('aria-label', fp ? 'Turn left' : 'Left');
+    }
+    if (btnRight) {
+        btnRight.textContent = fp ? '↷' : '▶';
+        btnRight.setAttribute('aria-label', fp ? 'Turn right' : 'Right');
+    }
+    if (btnUp) btnUp.setAttribute('aria-label', fp ? 'Forward' : 'Up');
+    if (btnDown) btnDown.setAttribute('aria-label', fp ? 'Reverse' : 'Down');
 }
 
 // Restart keeps the current view. After the final level it starts the game over.
@@ -2381,9 +2488,12 @@ function drawBanner() {
     const elapsed = BANNER_MS - bannerTimer;
     const alpha = Math.max(0, Math.min(1, elapsed / 250, bannerTimer / 500));
     const cx = CANVAS_W / 2;
-    const showGoal = currentLevel === 0;
-    const boxW = 400;
-    const boxH = showGoal ? 100 : 76;
+    const best = progress.best[currentLevel];
+    const extra = [];
+    if (currentLevel === 0 && !best) extra.push('Clean every tile  ·  dock before the battery dies  ·  beat par');
+    if (best) extra.push(`Your best: ${best.moves} moves  ${'★'.repeat(best.stars)}   ·   Par ${parMoves}`);
+    const boxW = 420;
+    const boxH = 76 + extra.length * 22;
     const y = 64;
 
     ctx.save();
@@ -2398,11 +2508,9 @@ function drawBanner() {
     ctx.fillStyle = '#FFF';
     ctx.font = 'bold 28px Segoe UI, sans-serif';
     ctx.fillText(bannerText, cx, y + 58);
-    if (showGoal) {
-        ctx.fillStyle = '#CCC';
-        ctx.font = '13px Segoe UI, sans-serif';
-        ctx.fillText('Clean every tile  ·  dock before the battery dies  ·  beat par', cx, y + 84);
-    }
+    ctx.fillStyle = '#CCC';
+    ctx.font = '13px Segoe UI, sans-serif';
+    extra.forEach((line, i) => ctx.fillText(line, cx, y + 84 + i * 22));
     ctx.restore();
 }
 
@@ -2492,319 +2600,25 @@ function updateUI() {
         elBatteryFill.style.backgroundColor = '#F44336';
         elBatteryText.style.color = '#F44336';
     }
+    elBatteryFill.classList.toggle('low', pct <= 20);
+    elBatteryText.classList.toggle('low', pct <= 20);
+
+    // How far home is, and whether the battery still covers it
+    const dockDist = chargerDistGrid ? chargerDistGrid[roomba.row][roomba.col] : -1;
+    const cost = LEVELS[currentLevel].batteryCost || 1;
+    if (elDockDist) {
+        elDockDist.textContent = dockDist < 0 ? '--' : dockDist === 0 ? 'here' : `${dockDist} moves`;
+        elDockDist.classList.toggle('warn', dockDist > 0 && pct <= (dockDist + 2) * cost);
+    }
+
+    // Screen-reader status: every ten tiles, and on every state change
+    if (elSrStatus && (cleaned % 10 === 0 || gameState !== 'PLAYING')) {
+        const state = gameState === 'LEVEL_COMPLETE' ? 'Level complete. ' : gameState === 'GAME_OVER' ? 'Out of battery. ' : '';
+        elSrStatus.textContent = `${state}${cleaned} of ${totalDirty} tiles cleaned, battery ${pct} percent, dock ${dockDist} moves away.`;
+    }
 }
 
 // === GAME LOOP ===
-// === FIRST-PERSON RAYCASTER ===
-
-function lerpAngle(from, to, t) {
-    let diff = to - from;
-    while (diff > Math.PI) diff -= 2 * Math.PI;
-    while (diff < -Math.PI) diff += 2 * Math.PI;
-    return from + diff * t;
-}
-
-// Wall/obstacle colors for raycaster (base color, darker shade for N/S faces)
-const FP_COLORS = {
-    wall:   { light: [120, 90, 90],  dark: [90, 68, 68] },
-    couch:  { light: [110, 76, 65],  dark: [82, 57, 49] },
-    table:  { light: [160, 128, 100], dark: [120, 96, 75] },
-    chair:  { light: [150, 150, 150], dark: [112, 112, 112] },
-    plant:  { light: [67, 160, 71],  dark: [50, 120, 53] },
-    petbed: { light: [229, 115, 115], dark: [172, 86, 86] },
-};
-
-function renderFirstPerson() {
-    // Update smooth position (normally done in drawRoomba, which is skipped in FP mode)
-    const targetX = roomba.col * TILE + TILE / 2;
-    const targetY = roomba.row * TILE + TILE / 2;
-    const fpLerp = easeK(0.3);
-    roomba.drawX += (targetX - roomba.drawX) * fpLerp;
-    roomba.drawY += (targetY - roomba.drawY) * fpLerp;
-    if (Math.abs(targetX - roomba.drawX) < 0.5) roomba.drawX = targetX;
-    if (Math.abs(targetY - roomba.drawY) < 0.5) roomba.drawY = targetY;
-
-    // Smooth camera rotation
-    fpAngle = lerpAngle(fpAngle, fpTargetAngle, easeK(0.22));
-
-    // Camera position (use smooth draw position)
-    const camX = roomba.drawX / TILE;
-    const camY = roomba.drawY / TILE;
-
-    // Precompute direction vectors
-    const dirX = Math.cos(fpAngle);
-    const dirY = Math.sin(fpAngle);
-    const planeX = Math.cos(fpAngle + Math.PI / 2) * Math.tan(FP_FOV / 2);
-    const planeY = Math.sin(fpAngle + Math.PI / 2) * Math.tan(FP_FOV / 2);
-
-    // Draw ceiling gradient
-    const ceilGrad = ctx.createLinearGradient(0, 0, 0, CANVAS_H / 2);
-    ceilGrad.addColorStop(0, '#3A3A4A');
-    ceilGrad.addColorStop(0.5, '#4A4A58');
-    ceilGrad.addColorStop(1, '#5A5A68');
-    ctx.fillStyle = ceilGrad;
-    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H / 2);
-
-    // Draw floor base gradient
-    const floorGrad = ctx.createLinearGradient(0, CANVAS_H / 2, 0, CANVAS_H);
-    floorGrad.addColorStop(0, '#8A7A60');
-    floorGrad.addColorStop(0.3, '#B0986A');
-    floorGrad.addColorStop(1, '#D4BC96');
-    ctx.fillStyle = floorGrad;
-    ctx.fillRect(0, CANVAS_H / 2, CANVAS_W, CANVAS_H / 2);
-
-    // Z-buffer for minimap (optional, not strictly needed)
-    const stripWidth = 2; // render every 2 pixels for performance
-    const numRays = Math.ceil(CANVAS_W / stripWidth);
-
-    for (let i = 0; i < numRays; i++) {
-        const screenX = i * stripWidth;
-        // Camera space: -1 to +1
-        const cameraX = 2 * i / numRays - 1;
-        const rayDirX = dirX + planeX * cameraX;
-        const rayDirY = dirY + planeY * cameraX;
-
-        // DDA setup
-        let mapX = Math.floor(camX);
-        let mapY = Math.floor(camY);
-        const deltaDistX = Math.abs(1 / rayDirX) || 1e10;
-        const deltaDistY = Math.abs(1 / rayDirY) || 1e10;
-        let stepX, stepY, sideDistX, sideDistY;
-
-        if (rayDirX < 0) {
-            stepX = -1;
-            sideDistX = (camX - mapX) * deltaDistX;
-        } else {
-            stepX = 1;
-            sideDistX = (mapX + 1 - camX) * deltaDistX;
-        }
-        if (rayDirY < 0) {
-            stepY = -1;
-            sideDistY = (camY - mapY) * deltaDistY;
-        } else {
-            stepY = 1;
-            sideDistY = (mapY + 1 - camY) * deltaDistY;
-        }
-
-        // DDA march
-        let hit = false;
-        let side = 0; // 0 = E/W face, 1 = N/S face
-        let maxSteps = 30;
-        while (!hit && maxSteps-- > 0) {
-            if (sideDistX < sideDistY) {
-                sideDistX += deltaDistX;
-                mapX += stepX;
-                side = 0;
-            } else {
-                sideDistY += deltaDistY;
-                mapY += stepY;
-                side = 1;
-            }
-            if (mapX < 0 || mapX >= COLS || mapY < 0 || mapY >= ROWS) {
-                hit = true; // boundary wall
-                break;
-            }
-            if (grid[mapY][mapX] === OBSTACLE) {
-                hit = true;
-            }
-        }
-
-        // Calculate perpendicular distance (fixes fisheye)
-        let perpDist;
-        if (side === 0) {
-            perpDist = (mapX - camX + (1 - stepX) / 2) / rayDirX;
-        } else {
-            perpDist = (mapY - camY + (1 - stepY) / 2) / rayDirY;
-        }
-        perpDist = Math.max(perpDist, 0.01);
-
-        // Determine obstacle type and height
-        let obsType = 'wall';
-        if (mapX >= 0 && mapX < COLS && mapY >= 0 && mapY < ROWS && obstacleTypeMap[mapY][mapX]) {
-            obsType = obstacleTypeMap[mapY][mapX];
-        }
-        const heightFactor = FP_HEIGHT_FACTORS[obsType] || 1.0;
-
-        // Wall strip dimensions
-        const fullWallH = CANVAS_H / perpDist;
-        const wallH = fullWallH * heightFactor;
-        const wallTop = Math.floor(CANVAS_H / 2 - wallH / 2);
-        const wallBot = Math.ceil(CANVAS_H / 2 + wallH / 2);
-
-        // Wall color with distance fog and side shading
-        const colors = FP_COLORS[obsType] || FP_COLORS.wall;
-        const baseColor = side === 1 ? colors.dark : colors.light;
-        const fog = Math.min(1, 0.15 + perpDist * 0.12);
-        const fogR = Math.floor(baseColor[0] * (1 - fog) + 40 * fog);
-        const fogG = Math.floor(baseColor[1] * (1 - fog) + 40 * fog);
-        const fogB = Math.floor(baseColor[2] * (1 - fog) + 50 * fog);
-        ctx.fillStyle = `rgb(${fogR},${fogG},${fogB})`;
-        ctx.fillRect(screenX, wallTop, stripWidth, wallBot - wallTop);
-
-        // Wall edge highlight (top edge for 3D effect)
-        if (wallH > 10) {
-            ctx.fillStyle = `rgba(255,255,255,${0.08 * (1 - fog)})`;
-            ctx.fillRect(screenX, wallTop, stripWidth, 2);
-            ctx.fillStyle = `rgba(0,0,0,${0.1 * (1 - fog)})`;
-            ctx.fillRect(screenX, wallBot - 2, stripWidth, 2);
-        }
-
-        // For shorter obstacles, draw the top face
-        if (heightFactor < 1.0) {
-            const topShade = Math.floor(baseColor[0] * 1.15 * (1 - fog) + 50 * fog);
-            const topG = Math.floor(baseColor[1] * 1.15 * (1 - fog) + 50 * fog);
-            const topB = Math.floor(baseColor[2] * 1.15 * (1 - fog) + 55 * fog);
-            ctx.fillStyle = `rgb(${Math.min(255, topShade)},${Math.min(255, topG)},${Math.min(255, topB)})`;
-            // Top face: from where full-height wall top would be, down to actual wall top
-            const fullTop = Math.floor(CANVAS_H / 2 - fullWallH / 2);
-            if (wallTop > fullTop) {
-                ctx.fillRect(screenX, wallTop - 3, stripWidth, 3);
-            }
-        }
-
-        // Floor casting (for each pixel row below the wall)
-        for (let y = Math.max(wallBot, CANVAS_H / 2); y < CANVAS_H; y += 2) {
-            const rowDist = (CANVAS_H * 0.5) / (y - CANVAS_H / 2);
-            const floorX = camX + rayDirX * rowDist;
-            const floorY = camY + rayDirY * rowDist;
-            const tileCol = Math.floor(floorX);
-            const tileRow = Math.floor(floorY);
-
-            if (tileCol < 0 || tileCol >= COLS || tileRow < 0 || tileRow >= ROWS) continue;
-
-            const cell = grid[tileRow][tileCol];
-            const fFog = Math.min(0.7, rowDist * 0.06);
-
-            let fr, fg, fb;
-            if (cell === CLEAN) {
-                fr = 184; fg = 230; fb = 200; // green clean
-            } else if (cell === CHARGER) {
-                // Pulsing blue
-                const pulse = 0.7 + 0.3 * Math.sin(chargerPulse * 0.05);
-                fr = 100 * pulse; fg = 160 * pulse; fb = 255 * pulse;
-            } else {
-                fr = 212; fg = 188; fb = 150; // tan dirty
-                // Subtle checkerboard for dirty tiles
-                if ((tileCol + tileRow) % 2 === 0) { fr -= 8; fg -= 6; fb -= 5; }
-            }
-
-            // Apply fog
-            fr = Math.floor(fr * (1 - fFog) + 50 * fFog);
-            fg = Math.floor(fg * (1 - fFog) + 48 * fFog);
-            fb = Math.floor(fb * (1 - fFog) + 55 * fFog);
-
-            ctx.fillStyle = `rgb(${fr},${fg},${fb})`;
-            ctx.fillRect(screenX, y, stripWidth, 2);
-        }
-    }
-
-    // Charger glow when on charger
-    if (grid[roomba.row][roomba.col] === CHARGER) {
-        ctx.save();
-        ctx.globalAlpha = 0.1 + 0.05 * Math.sin(chargerPulse * 0.06);
-        ctx.fillStyle = '#4080FF';
-        ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-        ctx.restore();
-    }
-
-    // Bump flash (red edges)
-    if (bumpFlash > 0) {
-        ctx.save();
-        ctx.globalAlpha = bumpFlash / 10 * 0.3;
-        const bfGrad = ctx.createRadialGradient(CANVAS_W/2, CANVAS_H/2, CANVAS_W * 0.3, CANVAS_W/2, CANVAS_H/2, CANVAS_W * 0.7);
-        bfGrad.addColorStop(0, 'rgba(255,0,0,0)');
-        bfGrad.addColorStop(1, 'rgba(255,50,50,0.6)');
-        ctx.fillStyle = bfGrad;
-        ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-        ctx.restore();
-    }
-
-    // Crosshair
-    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(CANVAS_W / 2 - 8, CANVAS_H / 2);
-    ctx.lineTo(CANVAS_W / 2 + 8, CANVAS_H / 2);
-    ctx.moveTo(CANVAS_W / 2, CANVAS_H / 2 - 8);
-    ctx.lineTo(CANVAS_W / 2, CANVAS_H / 2 + 8);
-    ctx.stroke();
-
-    // Direction indicator text
-    const dirLabels = { up: 'N', down: 'S', left: 'W', right: 'E' };
-    ctx.fillStyle = 'rgba(255,255,255,0.4)';
-    ctx.font = 'bold 14px Segoe UI, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(dirLabels[roomba.dir] || '', CANVAS_W / 2, 20);
-
-    // Draw minimap
-    drawFpMinimap();
-}
-
-function drawFpMinimap() {
-    const mapScale = 8;
-    const mapW = COLS * mapScale;
-    const mapH = ROWS * mapScale;
-    const mapX = 10;
-    const mapY = CANVAS_H - mapH - 10;
-
-    ctx.save();
-    ctx.globalAlpha = 0.7;
-
-    // Background
-    ctx.fillStyle = 'rgba(0,0,0,0.5)';
-    roundRect(ctx, mapX - 2, mapY - 2, mapW + 4, mapH + 4, 4);
-    ctx.fill();
-
-    // Tiles
-    for (let r = 0; r < ROWS; r++) {
-        for (let c = 0; c < COLS; c++) {
-            const cell = grid[r][c];
-            const tx = mapX + c * mapScale;
-            const ty = mapY + r * mapScale;
-            if (cell === OBSTACLE) {
-                ctx.fillStyle = '#666';
-            } else if (cell === CLEAN) {
-                ctx.fillStyle = '#6CB880';
-            } else if (cell === CHARGER) {
-                ctx.fillStyle = '#6090DD';
-            } else {
-                ctx.fillStyle = '#C4A878';
-            }
-            ctx.fillRect(tx, ty, mapScale - 0.5, mapScale - 0.5);
-        }
-    }
-
-    // Player position and direction
-    const px = mapX + (roomba.drawX / TILE) * mapScale;
-    const py = mapY + (roomba.drawY / TILE) * mapScale;
-
-    // FOV cone
-    ctx.fillStyle = 'rgba(255,255,100,0.15)';
-    ctx.beginPath();
-    ctx.moveTo(px, py);
-    const coneLen = 25;
-    ctx.lineTo(px + Math.cos(fpAngle - FP_FOV / 2) * coneLen, py + Math.sin(fpAngle - FP_FOV / 2) * coneLen);
-    ctx.lineTo(px + Math.cos(fpAngle + FP_FOV / 2) * coneLen, py + Math.sin(fpAngle + FP_FOV / 2) * coneLen);
-    ctx.closePath();
-    ctx.fill();
-
-    // Player dot
-    ctx.fillStyle = '#00FF88';
-    ctx.beginPath();
-    ctx.arc(px, py, 3, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Direction line
-    ctx.strokeStyle = '#00FF88';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(px, py);
-    ctx.lineTo(px + Math.cos(fpAngle) * 10, py + Math.sin(fpAngle) * 10);
-    ctx.stroke();
-
-    ctx.restore();
-}
-
 // === AMBIENT EFFECTS ===
 
 // Floating dust motes
@@ -3058,6 +2872,16 @@ function render(timestamp) {
         drawOverlay();
     }
 
+    // Short fade-in after switching views
+    if (viewFade > 0) {
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, viewFade);
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+        ctx.restore();
+        viewFade -= dtMs / 240;
+    }
+
     drawBanner();
     if (helpVisible) drawHelp();
 
@@ -3086,8 +2910,6 @@ document.addEventListener('DOMContentLoaded', () => {
     canvasDpr = Math.min(window.devicePixelRatio || 1, 3);
     canvas.width = Math.round(CANVAS_W * canvasDpr);
     canvas.height = Math.round(CANVAS_H * canvasDpr);
-    canvas.style.width = CANVAS_W + 'px';
-    canvas.style.height = CANVAS_H + 'px';
     ctx.setTransform(canvasDpr, 0, 0, canvasDpr, 0, 0);
 
     createFloorPatterns();
@@ -3102,6 +2924,8 @@ document.addEventListener('DOMContentLoaded', () => {
     elParCount = document.getElementById('parCount');
     elBtnView = document.getElementById('btnViewToggle');
     elBtnHelp = document.getElementById('btnHelp');
+    elDockDist = document.getElementById('dockDist');
+    elSrStatus = document.getElementById('srStatus');
 
     // View toggle button (blur afterwards so Space/Enter don't re-trigger it)
     if (elBtnView) {
@@ -3151,6 +2975,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    initLevel(0);
+    loadProgress();
+    currentLevel = progress.unlocked; // resume at the furthest level reached
+    initLevel(currentLevel);
+    updateViewButtons();
     requestAnimationFrame(render);
 });
