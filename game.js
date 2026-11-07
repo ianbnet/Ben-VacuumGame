@@ -660,6 +660,7 @@ function tryMove(dc, dr) {
 
     if (newCol < 0 || newCol >= COLS || newRow < 0 || newRow >= ROWS || grid[newRow][newCol] === OBSTACLE) {
         bumpFlash = 10;
+        sound('bump');
         return false;
     }
 
@@ -667,8 +668,10 @@ function tryMove(dc, dr) {
     roomba.row = newRow;
     moves++;
     roombaWheelAngle += 0.5;
+    noteMove();
 
     const cost = LEVELS[currentLevel].batteryCost || 1;
+    const batteryBefore = roomba.battery;
     roomba.battery = Math.max(0, roomba.battery - cost);
 
     if (grid[newRow][newCol] === DIRTY) {
@@ -677,10 +680,14 @@ function tryMove(dc, dr) {
         score += 10;
         cleanAnimations.push({ col: newCol, row: newRow, progress: 0 });
         tileCleanFade[`${newCol},${newRow}`] = 0; // start fade-in
+        sound('clean');
     }
 
     if (grid[newRow][newCol] === CHARGER) {
+        if (roomba.battery < 100) sound('dock');
         roomba.battery = 100;
+    } else if (batteryBefore > 20 && roomba.battery <= 20) {
+        sound('lowBattery');
     }
 
     if (cleaned >= totalDirty) {
@@ -688,10 +695,20 @@ function tryMove(dc, dr) {
     } else if (roomba.battery <= 0) {
         gameState = 'GAME_OVER';
         stopHold();
+        sound('gameOver');
     }
 
     updateUI();
     return true;
+}
+
+// Sound hooks; harmless when audio.js is not loaded (tests)
+function sound(name) {
+    if (typeof sfx !== 'undefined' && sfx[name]) sfx[name]();
+}
+
+function noteMove() {
+    if (typeof audio !== 'undefined' && typeof performance !== 'undefined') audio.lastMoveAt = performance.now();
 }
 
 // Level finished. The bonus is tied to par so the target on screen and the scoring agree.
@@ -703,6 +720,7 @@ function completeLevel() {
     levelResult = { moves, par: parMoves, bonus, stars, tileScore: cleaned * 10 };
     gameState = 'LEVEL_COMPLETE';
     stopHold();
+    sound('levelComplete');
     recordLevelResult(currentLevel, levelResult);
     buildLevelSelect();
 }
@@ -715,6 +733,7 @@ function handleFpDirection(dir) {
         idx = (idx + (dir === 'right' ? 1 : -1) + 4) % 4;
         roomba.dir = FP_DIR_ORDER[idx];
         fpTargetAngle = FP_ANGLE_MAP[roomba.dir];
+        sound('turn');
         return;
     }
     const moveDir = dir === 'up' ? roomba.dir : OPPOSITE_DIR[roomba.dir];
@@ -764,12 +783,15 @@ function stopHold() {
     }
 }
 
+// Works while playing and during the ghost replay
 function toggleView() {
-    if (gameState !== 'PLAYING') return;
+    if (gameState !== 'PLAYING' && gameState !== 'PAR_REPLAY') return;
     viewMode = viewMode === 'TD' ? 'FP' : 'TD';
-    // Snap the camera to the Roomba's real facing so the two views never disagree
-    fpTargetAngle = FP_ANGLE_MAP[roomba.dir];
-    fpAngle = fpTargetAngle;
+    if (gameState === 'PLAYING') {
+        // Snap the camera to the Roomba's real facing so the two views never disagree
+        fpTargetAngle = FP_ANGLE_MAP[roomba.dir];
+        fpAngle = fpTargetAngle;
+    }
     viewFade = 1;
     stopHold();
     updateViewButtons();
@@ -853,6 +875,12 @@ document.addEventListener('keydown', (e) => {
     // V: toggle first-person view
     if (e.key === 'v' || e.key === 'V') {
         toggleView();
+        return;
+    }
+
+    // M: mute / unmute
+    if (e.key === 'm' || e.key === 'M') {
+        if (typeof audioToggleMute === 'function') audioToggleMute();
         return;
     }
 
@@ -2168,6 +2196,7 @@ function startParReplay() {
     npcReplay.wheelAngle = 0;
     npcReplay.drawX = parPath[0].col * TILE + TILE / 2;
     npcReplay.drawY = parPath[0].row * TILE + TILE / 2;
+    npcReplay.angle = FP_ANGLE_MAP.up;
 }
 
 function updateNpcReplay() {
@@ -2522,7 +2551,8 @@ function drawHelp() {
         ['3D view', 'V or the 3D View button. In 3D, left and right turn in place; up and down drive forward and back.'],
         ['Restart', 'R or the Restart button. Restarting a level also restarts its score.'],
         ['Next level', 'SPACE, or click the board, once a level is complete.'],
-        ['Ghost', 'W on the Level Complete screen replays the par route. SPACE skips the replay.'],
+        ['Ghost', 'W on the Level Complete screen replays the par route; V rides along in 3D. SPACE skips it.'],
+        ['Sound', 'M or the Sound button mutes and unmutes.'],
         ['Help', 'H or ? shows this screen. Escape closes it.'],
     ];
     ctx.save();
@@ -2533,7 +2563,7 @@ function drawHelp() {
     ctx.textAlign = 'center';
     ctx.fillText('How to play', CANVAS_W / 2, 64);
     ctx.textAlign = 'left';
-    let y = 112;
+    let y = 108;
     for (const [key, text] of lines) {
         ctx.fillStyle = '#9ED8CC';
         ctx.font = 'bold 15px Segoe UI, sans-serif';
@@ -2541,7 +2571,7 @@ function drawHelp() {
         ctx.fillStyle = '#EEE';
         ctx.font = '15px Segoe UI, sans-serif';
         wrapText(text, 160, y, CANVAS_W - 216, 20);
-        y += 58;
+        y += 52;
     }
     ctx.fillStyle = '#AAA';
     ctx.font = '13px Segoe UI, sans-serif';
@@ -2848,15 +2878,21 @@ function render(timestamp) {
 
     if (gameState === 'PAR_REPLAY') {
         updateNpcReplay();
-        drawNpcGrid();
-        drawBaseboards();
-        drawObstacles();
-        drawNpcTrail();
-        drawRoomVignette();
-        drawSunlight();
-        drawDustMotes();
-        drawNpcVacuum();
-        drawNpcOverlay();
+        if (viewMode === 'FP' && gameState === 'PAR_REPLAY') {
+            // Ride along with the ghost
+            renderFirstPerson(fpGhostView());
+        } else {
+            drawNpcGrid();
+            drawBaseboards();
+            drawObstacles();
+            drawNpcTrail();
+            drawRoomVignette();
+            drawSunlight();
+            drawDustMotes();
+            drawNpcVacuum();
+        }
+        if (gameState === 'PAR_REPLAY') drawNpcOverlay();
+        else drawOverlay();
     } else if (fpActive) {
         renderFirstPerson();
         drawOverlay();
@@ -2888,6 +2924,9 @@ function render(timestamp) {
     if (bumpFlash > 0) bumpFlash = Math.max(0, bumpFlash - dtFrames);
     chargerPulse += dtFrames;
     if (bannerTimer > 0) bannerTimer -= dtMs;
+    if (typeof audioUpdate === 'function') {
+        try { audioUpdate(timestamp); } catch (e) { console.error('audio', e); }
+    }
 
     requestAnimationFrame(render);
 }
@@ -2938,6 +2977,15 @@ document.addEventListener('DOMContentLoaded', () => {
         elBtnHelp.addEventListener('click', () => {
             toggleHelp();
             elBtnHelp.blur();
+        });
+    }
+    const elBtnMute = document.getElementById('btnMute');
+    if (elBtnMute && typeof audioToggleMute === 'function') {
+        audioLoadMute();
+        audioSetMuted(audio.muted);
+        elBtnMute.addEventListener('click', () => {
+            audioToggleMute();
+            elBtnMute.blur();
         });
     }
 

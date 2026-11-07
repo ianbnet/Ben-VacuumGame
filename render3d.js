@@ -15,7 +15,8 @@ const FP_TEX = 64;                          // texture size in texels (square)
 const FP_FOG = [236, 226, 208];             // warm haze, matching the 2D sunlight
 const FP_FOG_PER_TILE = 0.04;
 const FP_FOG_MAX = 0.5;
-const FP_SPRITE_TYPES = {};                 // obstacle types drawn as sprites instead of boxes (filled in later)
+const FP_SPRITE_TYPES = { plant: 'spritePlant', chair: 'spriteChair' }; // drawn as billboards, not boxes
+const FP_SPRITE_SIZE = { plant: { w: 0.8, h: 0.95 }, chair: { w: 0.85, h: 0.7 } }; // world size in tiles
 const FP_BOTTOM_FACTORS = { table: 0.42 };  // raised slabs you can see under; a Roomba is lower than a table top
 const FP_MINIMAP_SCALE = 9;
 
@@ -30,7 +31,8 @@ function lerpAngle(from, to, t) {
 
 // --- Textures -------------------------------------------------------------
 
-// Draw a texture with canvas calls and bake it to packed 0xRRGGBB texels
+// Draw a texture with canvas calls and bake it to packed 0xAARRGGBB texels.
+// Alpha only matters for sprites, where transparent texels are skipped.
 function fpMakeTexture(draw) {
     const c = document.createElement('canvas');
     c.width = FP_TEX;
@@ -39,13 +41,13 @@ function fpMakeTexture(draw) {
     draw(t, FP_TEX);
     const data = t.getImageData(0, 0, FP_TEX, FP_TEX).data;
     const out = new Uint32Array(FP_TEX * FP_TEX);
-    let sr = 0, sg = 0, sb = 0;
+    let sr = 0, sg = 0, sb = 0, n = 0;
     for (let i = 0; i < out.length; i++) {
-        const r = data[i * 4], g = data[i * 4 + 1], b = data[i * 4 + 2];
-        out[i] = (r << 16) | (g << 8) | b;
-        sr += r; sg += g; sb += b;
+        const r = data[i * 4], g = data[i * 4 + 1], b = data[i * 4 + 2], a = data[i * 4 + 3];
+        out[i] = (a << 24) | (r << 16) | (g << 8) | b;
+        if (a > 127) { sr += r; sg += g; sb += b; n++; }
     }
-    const n = out.length;
+    n = n || 1;
     out.avg = ((sr / n) << 16) | ((sg / n) << 8) | (sb / n);
     return out;
 }
@@ -170,6 +172,64 @@ function fpBuildTextures() {
         for (let y = n * 0.4; y < n; y += 6) t.fillRect(0, y, n, 1);
     });
 
+    // Billboard sprites: transparent background, drawn from a low viewpoint
+    tex.spritePlant = fpMakeTexture((t, n) => {
+        t.clearRect(0, 0, n, n);
+        // pot
+        t.fillStyle = '#C07848';
+        t.beginPath();
+        t.moveTo(n * 0.28, n * 0.62);
+        t.lineTo(n * 0.72, n * 0.62);
+        t.lineTo(n * 0.66, n * 0.98);
+        t.lineTo(n * 0.34, n * 0.98);
+        t.closePath();
+        t.fill();
+        t.fillStyle = '#9A5835';
+        t.fillRect(n * 0.26, n * 0.6, n * 0.48, n * 0.07);
+        t.fillStyle = 'rgba(255,255,255,0.18)';
+        t.fillRect(n * 0.34, n * 0.7, n * 0.06, n * 0.22);
+        // leaves
+        const rnd = fpRand(5);
+        const greens = ['#4CAF50', '#388E3C', '#2E7D32', '#5CBF60', '#43A047'];
+        for (let i = 0; i < 26; i++) {
+            const a = rnd() * Math.PI * 2;
+            const len = n * (0.16 + rnd() * 0.22);
+            const cx = n * 0.5 + Math.cos(a) * len * 0.5;
+            const cy = n * 0.36 + Math.sin(a) * len * 0.45;
+            t.fillStyle = greens[i % greens.length];
+            t.beginPath();
+            t.ellipse(cx, cy, len * 0.5, len * 0.18, a, 0, Math.PI * 2);
+            t.fill();
+        }
+        t.fillStyle = '#2E7D32';
+        t.fillRect(n * 0.48, n * 0.4, n * 0.04, n * 0.24);
+    });
+
+    tex.spriteChair = fpMakeTexture((t, n) => {
+        t.clearRect(0, 0, n, n);
+        const dark = '#5E5E5E', mid = '#757575', light = '#8F8F8F';
+        // back posts and rails
+        t.fillStyle = mid;
+        t.fillRect(n * 0.22, n * 0.04, n * 0.08, n * 0.5);
+        t.fillRect(n * 0.70, n * 0.04, n * 0.08, n * 0.5);
+        t.fillStyle = light;
+        t.fillRect(n * 0.22, n * 0.06, n * 0.56, n * 0.07);
+        t.fillRect(n * 0.22, n * 0.2, n * 0.56, n * 0.06);
+        t.fillRect(n * 0.22, n * 0.33, n * 0.56, n * 0.06);
+        // seat
+        t.fillStyle = mid;
+        t.fillRect(n * 0.14, n * 0.5, n * 0.72, n * 0.12);
+        t.fillStyle = 'rgba(255,255,255,0.15)';
+        t.fillRect(n * 0.14, n * 0.5, n * 0.72, n * 0.03);
+        // legs
+        t.fillStyle = dark;
+        t.fillRect(n * 0.17, n * 0.62, n * 0.07, n * 0.36);
+        t.fillRect(n * 0.76, n * 0.62, n * 0.07, n * 0.36);
+        t.fillRect(n * 0.3, n * 0.62, n * 0.05, n * 0.3);
+        t.fillRect(n * 0.65, n * 0.62, n * 0.05, n * 0.3);
+        t.fillRect(n * 0.17, n * 0.8, n * 0.66, n * 0.04);
+    });
+
     tex.ceiling = fpMakeTexture((t, n) => {
         t.fillStyle = '#E9E2D5';
         t.fillRect(0, 0, n, n);
@@ -251,8 +311,30 @@ function initFirstPerson() {
         tex: fpBuildTextures(),
         floorDist, ceilDist, floorFog, ceilFog,
         hits: [],
+        sprites: [],      // projected sprites for the current frame
+        colSprites: [],   // the ones covering the column being drawn
+        levelSprites: [], // world positions of sprite obstacles, rebuilt per level
+        spriteLevel: -1,
         fogPacked: 0xFF000000 | (FP_FOG[2] << 16) | (FP_FOG[1] << 8) | FP_FOG[0],
     };
+}
+
+// World positions of the plants and chairs in the current level
+function fpLevelSprites() {
+    if (fp3d.spriteLevel !== currentLevel) {
+        fp3d.levelSprites = [];
+        for (const obs of LEVELS[currentLevel].obstacles) {
+            const key = FP_SPRITE_TYPES[obs.type];
+            if (!key) continue;
+            for (let dr = 0; dr < obs.h; dr++) {
+                for (let dc = 0; dc < obs.w; dc++) {
+                    fp3d.levelSprites.push({ x: obs.col + dc + 0.5, y: obs.row + dr + 0.5, type: obs.type, texKey: key });
+                }
+            }
+        }
+        fp3d.spriteLevel = currentLevel;
+    }
+    return fp3d.levelSprites;
 }
 
 // Shade a packed 0xRRGGBB texel: multiply by `shade`, blend toward fog by `fog`, return ABGR for the buffer
@@ -295,13 +377,39 @@ function fpPlayerView() {
         angle: fpAngle,
         grid,
         typeMap: obstacleTypeMap,
+        sprites: fpLevelSprites(),
         aheadCol: aheadOk ? aheadCol : -1,
         aheadRow: aheadOk ? aheadRow : -1,
         onDock: grid[roomba.row][roomba.col] === CHARGER,
         showHud: true,
-        posCol: roomba.col,
-        posRow: roomba.row,
-        facing: roomba.dir,
+        ghost: false,
+    };
+}
+
+// The ghost's point of view during the par-route replay
+function fpGhostView() {
+    const targetX = npcReplay.col * TILE + TILE / 2;
+    const targetY = npcReplay.row * TILE + TILE / 2;
+    const k = easeK(0.25);
+    npcReplay.drawX += (targetX - npcReplay.drawX) * k;
+    npcReplay.drawY += (targetY - npcReplay.drawY) * k;
+    if (Math.abs(targetX - npcReplay.drawX) < 0.5) npcReplay.drawX = targetX;
+    if (Math.abs(targetY - npcReplay.drawY) < 0.5) npcReplay.drawY = targetY;
+    if (npcReplay.angle === undefined) npcReplay.angle = FP_ANGLE_MAP[npcReplay.dir];
+    npcReplay.angle = lerpAngle(npcReplay.angle, FP_ANGLE_MAP[npcReplay.dir], easeK(0.22));
+
+    return {
+        camX: npcReplay.drawX / TILE,
+        camY: npcReplay.drawY / TILE,
+        angle: npcReplay.angle,
+        grid: npcReplay.grid || grid,
+        typeMap: obstacleTypeMap,
+        sprites: fpLevelSprites(),
+        aheadCol: -1,
+        aheadRow: -1,
+        onDock: false,
+        showHud: false,
+        ghost: true,
     };
 }
 
@@ -325,6 +433,46 @@ function fpRenderScene(view) {
     const hits = fp3d.hits;
     const aheadCol = view.aheadCol, aheadRow = view.aheadRow;
     const T = FP_TEX, TM = FP_TEX - 1;
+
+    // Project this frame's sprites to screen space, farthest first
+    const sprites = fp3d.sprites;
+    sprites.length = 0;
+    const invDet = 1 / (planeX * dirY - dirX * planeY);
+    const halfW = W / 2;
+    for (const s of view.sprites || []) {
+        const rx = s.x - camX, ry = s.y - camY;
+        const tx = invDet * (dirY * rx - dirX * ry);
+        const ty = invDet * (-planeY * rx + planeX * ry); // depth
+        if (ty <= 0.08) continue;
+        const sx = halfW * (1 + tx / ty);
+        const size = FP_SPRITE_SIZE[s.type];
+        const wPx = ((halfW / planeLen) * size.w) / ty;
+        const left = sx - wPx / 2, right = sx + wPx / 2;
+        if (right < 0 || left >= W) continue;
+        sprites.push({
+            depth: ty, left, right,
+            top: horizon - ((size.h - FP_EYE) * FP_SCALE) / ty,
+            bot: horizon + eyeS / ty,
+            tex: tex[s.texKey],
+            fog: Math.min(FP_FOG_MAX, ty * FP_FOG_PER_TILE),
+        });
+    }
+    sprites.sort((a, b) => b.depth - a.depth);
+    const colSprites = fp3d.colSprites;
+
+    const paintSprite = (s, x) => {
+        const texture = s.tex;
+        const u = (((x - s.left) / (s.right - s.left)) * TM) | 0;
+        const hgt = s.bot - s.top;
+        const y0 = Math.max(0, Math.ceil(s.top));
+        const y1 = Math.min(H - 1, Math.floor(s.bot));
+        for (let y = y0; y <= y1; y++) {
+            const tv = (((y - s.top) / hgt) * TM) | 0;
+            const texel = texture[tv * T + u];
+            if (texel >>> 24 < 128) continue; // transparent
+            buf[y * W + x] = fpShade(texel, 1.0, s.fog);
+        }
+    };
 
     for (let x = 0; x < W; x++) {
         const cameraX = (2 * x) / W - 1;
@@ -396,10 +544,20 @@ function fpRenderScene(view) {
             }
         }
 
-        // Paint the hits back to front so near furniture covers what is behind it
+        // Sprites covering this column, farthest first
+        colSprites.length = 0;
+        for (let k = 0; k < sprites.length; k++) {
+            const s = sprites[k];
+            if (x >= s.left && x < s.right) colSprites.push(s);
+        }
+        let si = 0;
+
+        // Paint the hits back to front so near furniture covers what is behind it,
+        // slotting each sprite in at its own depth
         for (let i = hits.length - 1; i >= 0; i--) {
             const hit = hits[i];
             const d = hit.dist;
+            while (si < colSprites.length && colSprites[si].depth >= d) paintSprite(colSprites[si++], x);
             const texture = tex[hit.type] || tex.wall;
             const top = horizon - ((hit.h - FP_EYE) * FP_SCALE) / d;
             const raised = hit.hb > FP_EYE; // a table top: open underneath
@@ -431,6 +589,8 @@ function fpRenderScene(view) {
                 for (let y = ya; y < yb; y++) buf[y * W + x] = c;
             }
         }
+        // Sprites nearer than everything solid
+        while (si < colSprites.length) paintSprite(colSprites[si++], x);
     }
 
     fp3d.ctx.putImageData(fp3d.image, 0, 0);
@@ -560,11 +720,12 @@ function fpDrawMinimap(view) {
     ctx.lineTo(px + Math.cos(view.angle + FP_FOV / 2) * cone, py + Math.sin(view.angle + FP_FOV / 2) * cone);
     ctx.closePath();
     ctx.fill();
-    ctx.fillStyle = '#00FF88';
+    const dotColor = view.ghost ? '#00BFFF' : '#00FF88';
+    ctx.fillStyle = dotColor;
     ctx.beginPath();
     ctx.arc(px, py, 3.2, 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = '#00FF88';
+    ctx.strokeStyle = dotColor;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     ctx.moveTo(px, py);
@@ -642,7 +803,7 @@ function renderFirstPerson(view) {
         ctx.restore();
     }
 
-    fpDrawBumper(shakeX, shakeY);
+    if (!view.ghost) fpDrawBumper(shakeX, shakeY);
     fpDrawCompass(view.angle);
     if (view.showHud) fpDrawStatus();
     fpDrawMinimap(view);
