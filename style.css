@@ -540,3 +540,104 @@ body {
     outline: 2px solid #9ED8CC;
     outline-offset: 3px;
 }
+
+/* === Upgrades panel === */
+.upgrade-hint {
+    font-size: 12px;
+    color: #BBB;
+    text-align: center;
+}
+
+.upgrade-groups {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px 24px;
+    justify-content: center;
+}
+
+.upgrade-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex: 1 1 300px;
+    max-width: 340px;
+}
+
+.upgrade-group-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #9ED8CC;
+}
+
+.upgrade-card {
+    background: #2E2E3C;
+    border: 1px solid #4A4A5A;
+    border-radius: 8px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.upgrade-card.owned {
+    border-color: #1A7A6D;
+}
+
+.upgrade-name {
+    font-size: 14px;
+    font-weight: 700;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.upgrade-pips {
+    font-size: 11px;
+    letter-spacing: 2px;
+    color: #FFD600;
+}
+
+.upgrade-desc {
+    font-size: 12px;
+    color: #CCC;
+}
+
+.upgrade-now {
+    font-size: 11px;
+    color: #9ED8CC;
+}
+
+.upgrade-buy {
+    align-self: flex-start;
+    margin-top: 4px;
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: 12px;
+}
+
+.upgrade-buy:disabled {
+    background: #4A4A5A;
+    color: #999;
+    cursor: default;
+}
+
+#btnUpgrades.has-points {
+    background: #B8860B;
+    animation: points-glow 1.6s ease-in-out infinite;
+}
+
+@keyframes points-glow {
+    0%, 100% { box-shadow: 0 0 0 rgba(255, 214, 0, 0); }
+    50% { box-shadow: 0 0 12px rgba(255, 214, 0, 0.6); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    #btnUpgrades.has-points {
+        animation: none;
+    }
+}
+
+#batteryFill.over {
+    box-shadow: 0 0 8px #6EC6FF;
+}

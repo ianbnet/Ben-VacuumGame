@@ -439,3 +439,29 @@ function seededRandom(seed) {
         return s / 4294967296;
     };
 }
+
+// BFS from several sources at once (e.g. every tile that charges), returns a distance grid
+function bfsFromSources(g, sources) {
+    const dist = Array.from({ length: ROWS }, () => new Int16Array(COLS).fill(-1));
+    const queue = [];
+    for (const s of sources) {
+        if (dist[s.row][s.col] !== -1) continue;
+        dist[s.row][s.col] = 0;
+        queue.push([s.col, s.row]);
+    }
+    const dirs = [[0, -1], [0, 1], [-1, 0], [1, 0]];
+    let qi = 0;
+    while (qi < queue.length) {
+        const [cx, cy] = queue[qi++];
+        const d = dist[cy][cx];
+        for (const [dx, dy] of dirs) {
+            const nx = cx + dx, ny = cy + dy;
+            if (nx < 0 || nx >= COLS || ny < 0 || ny >= ROWS) continue;
+            if (dist[ny][nx] !== -1) continue;
+            if (g[ny][nx] === OBSTACLE) continue;
+            dist[ny][nx] = d + 1;
+            queue.push([nx, ny]);
+        }
+    }
+    return dist;
+}

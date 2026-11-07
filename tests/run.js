@@ -59,7 +59,7 @@ const sandbox = {
 };
 sandbox.window = sandbox;
 vm.createContext(sandbox);
-for (const f of ['core.js', 'design.js', 'game.js']) {
+for (const f of ['core.js', 'upgrades.js', 'design.js', 'game.js']) {
     vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), sandbox, { filename: f });
 }
 const G = (expr) => vm.runInContext(expr, sandbox);
@@ -223,6 +223,64 @@ check(G('design.lightColor') === '#1A9A8A' && G('design.flashColor') === '#FFE2A
 G('setLightColor("not a colour")');
 check(G('design.lightColor') === '#1A9A8A', 'an invalid colour is rejected');
 G('designReset()');
+
+section('Ghost replay from any state');
+G('viewMode = "TD"; progress.unlocked = 5; selectLevel(0); tryMove(0, -1);');
+G('startParReplay()');
+check(G('gameState') === 'PAR_REPLAY' && G('npcReplay.returnState') === 'PLAYING', 'the ghost can start mid-level');
+check(G('cleaned') === 1 && G('roomba.row') === 10, 'the player\'s game is untouched while the ghost runs');
+G('endParReplay()');
+check(G('gameState') === 'PLAYING' && G('cleaned') === 1, 'ending the replay returns to play');
+G('gameState = "GAME_OVER"; startParReplay()');
+check(G('gameState') === 'GAME_OVER', 'no ghost from the game-over screen');
+
+section('Upgrades');
+G('progress.points = 0; progress.upgrades = sanitizeUpgrades(null); selectLevel(0);');
+check(G('batteryMax()') === 100 && G('moveCostMultiplier()') === 1 && G('padRadius()') === 0 && G('overchargeFactor()') === 1 && G('solarPerMove()') === 0, 'no upgrades by default');
+check(G('roomba.battery') === 100, 'starts with a full standard battery');
+check(G('canBuyUpgrade("motor")') === false && G('buyUpgrade("motor")') === false, 'cannot buy without points');
+G('progress.points = 9');
+check(G('buyUpgrade("motor")') === true && G('progress.points') === 7 && G('upgradeLevel("motor")') === 1, 'buying spends the cost');
+check(Math.abs(G('moveCost()') - 0.85) < 1e-9, 'efficient motor cuts the drain');
+G('tryMove(0, -1)');
+check(Math.abs(G('roomba.battery') - 99.15) < 1e-9, 'a move costs the reduced amount');
+G('buyUpgrade("battery")');
+check(G('batteryMax()') === 125 && G('upgradeLevel("battery")') === 1 && G('progress.points') === 5, 'bigger battery raises the maximum');
+G('buyUpgrade("pad")');
+check(G('padRadius()') === 1 && G('isChargingTile(14, 10)') === true && G('isChargingTile(14, 9)') === false && G('isChargingTile(13, 11)') === true, 'the charging pad covers the dock\'s neighbours');
+check(G('chargerDistGrid[9][14]') === 1 && G('chargerDistGrid[10][14]') === 0, 'dock distance measures to the nearest charging tile');
+check(G('chargingPadGrid[10][14]') === 1 && G('chargingPadGrid[9][14]') === 0, 'the pad grid marks charging tiles');
+G('roomba.battery = 40; roomba.col = 14; roomba.row = 9; tryMove(0, 1)');
+check(G('roomba.battery') === 125, 'a pad tile charges to the new maximum');
+G('progress.points = 10; buyUpgrade("overcharge"); roomba.battery = 40; roomba.col = 14; roomba.row = 10; tryMove(0, 1)');
+check(Math.abs(G('roomba.battery') - 143.75) < 1e-9, 'overcharge takes the battery past full on the dock');
+G('roomba.col = 7; roomba.row = 7; tryMove(0, -1)');
+check(Math.abs(G('roomba.battery') - (143.75 - 0.85)) < 1e-9, 'an overcharged battery drains normally away from the dock');
+G('progress.points = 10; buyUpgrade("solar"); roomba.battery = 140; roomba.col = 7; roomba.row = 7; tryMove(0, -1)');
+check(Math.abs(G('roomba.battery') - (140 - 0.85)) < 1e-9, 'solar cells do not top up an overcharged battery');
+G('roomba.battery = 50; roomba.col = 7; roomba.row = 7; tryMove(0, -1)');
+check(Math.abs(G('roomba.battery') - (50 - 0.85 + 0.2)) < 1e-9, 'solar cells trickle-charge on the move');
+check(G('isLowBattery()') === false, 'low battery is relative to the maximum');
+G('roomba.battery = 24');
+check(G('isLowBattery()') === true, 'under 20% of a 125 battery is low');
+const spent = G('upgradeTotalSpent()');
+const pointsBeforeRefund = G('progress.points');
+G('refundUpgrades()');
+check(G('upgradeLevel("motor")') === 0 && G('batteryMax()') === 100 && G('progress.points') === pointsBeforeRefund + spent, 'refund returns every point');
+check(JSON.parse(storage.get('ben-vacuum-game.progress.v1')).upgrades.motor === 0, 'upgrade levels are saved');
+G('progress.points = 0; buyUpgrade("motor")');
+check(G('upgradeLevel("motor")') === 0, 'no points, no purchase after refund');
+
+section('Upgrade points for new stars');
+G('progress.points = 0; progress.best = {}; progress.upgrades = sanitizeUpgrades(null); selectLevel(0);');
+G('for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) { if (grid[r][c] === DIRTY && !(c === 14 && r === 10)) grid[r][c] = CLEAN; } cleaned = totalDirty - 1; moves = 300; tryMove(0, -1)');
+check(G('levelResult.stars') === 1 && G('levelResult.points') === 1 && G('progress.points') === 1, 'one star on a new level earns one point');
+G('selectLevel(0); for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) { if (grid[r][c] === DIRTY && !(c === 14 && r === 10)) grid[r][c] = CLEAN; } cleaned = totalDirty - 1; moves = 100; tryMove(0, -1)');
+check(G('levelResult.stars') === 3 && G('levelResult.points') === 2 && G('progress.points') === 3, 'improving to three stars earns the two new ones');
+G('selectLevel(0); for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) { if (grid[r][c] === DIRTY && !(c === 14 && r === 10)) grid[r][c] = CLEAN; } cleaned = totalDirty - 1; moves = 100; tryMove(0, -1)');
+check(G('levelResult.points') === 0 && G('progress.points') === 3, 'repeating a result earns nothing');
+check(JSON.parse(storage.get('ben-vacuum-game.progress.v1')).points === 3, 'points are saved');
+G('progress.points = 0; progress.upgrades = sanitizeUpgrades(null); saveProgress();');
 
 console.log(`\n${passes} passed, ${failures} failed`);
 process.exit(failures ? 1 : 0);

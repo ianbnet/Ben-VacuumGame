@@ -20,8 +20,9 @@ Then open http://localhost:3000. Any static file server works (`npm start` runs 
 | V | Switch between 2D and 3D. In 3D, left and right turn in place; up and down drive forward and back. |
 | F | Flashlight on / off. |
 | R | Restart the level (also restarts its score). |
-| Space | Next level once a level is complete; skips the ghost replay. |
-| W | On the Level Complete screen, replay the par route. Press V during it to ride along in 3D. |
+| Space | Next level once a level is complete; ends the ghost replay. |
+| G | Watch the ghost run the par route, at any time. Press V during it to ride along in 3D; Space or G ends it. |
+| U | Upgrades panel. Every new star on a level is a point to spend on the vacuum or the charger. |
 | M | Mute / unmute. |
 | Design button | Colour wheels for the vacuum's lights and its flashlight. |
 | H or ? | Help. |
@@ -37,6 +38,7 @@ The on-screen d-pad, level buttons and panel buttons do the same things and work
 | `render2d.js` | The top-down view: floor, dock, furniture, Roomba, ghost, overlays, banner, help, ambient effects. |
 | `render3d.js` | The first-person view: a software raycaster into an `ImageData` buffer with textured walls, floor and ceiling, see-over furniture, sprites, and the in-view HUD. |
 | `audio.js` | Synthesised sound effects and the motor hum (Web Audio, no files). |
+| `upgrades.js` | The upgrade catalogue (efficient motor, bigger battery, solar cells, charging pad, overcharge), points and the Upgrades panel. |
 | `design.js` | The Design panel: colour wheels for the vacuum's lights and flashlight, saved settings. |
 | `scene2d.js` | Cached 2D layers: plank floor, furniture with cast shadows, window light; tile dust and polish, dust puffs, bokeh. |
 | `serve.py` | A no-cache static server for local play. |

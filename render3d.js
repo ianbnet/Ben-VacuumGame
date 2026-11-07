@@ -263,6 +263,24 @@ function fpBuildTextures() {
         if (cleanTileCanvas) t.drawImage(cleanTileCanvas, 0, 0, n, n);
         else { t.fillStyle = COLORS.clean; t.fillRect(0, 0, n, n); }
     });
+    // The same two floors under the charging pad's blue glow
+    const padWash = (t, n) => {
+        t.fillStyle = 'rgba(70, 140, 255, 0.4)';
+        t.fillRect(0, 0, n, n);
+        t.strokeStyle = 'rgba(140, 190, 255, 0.7)';
+        t.lineWidth = 3;
+        t.strokeRect(1.5, 1.5, n - 3, n - 3);
+    };
+    tex.floorPad = fpMakeTexture((t, n) => {
+        if (floorTileCanvas) t.drawImage(floorTileCanvas, 0, 0, n, n);
+        else { t.fillStyle = COLORS.dirty; t.fillRect(0, 0, n, n); }
+        padWash(t, n);
+    });
+    tex.cleanPad = fpMakeTexture((t, n) => {
+        if (cleanTileCanvas) t.drawImage(cleanTileCanvas, 0, 0, n, n);
+        else { t.fillStyle = COLORS.clean; t.fillRect(0, 0, n, n); }
+        padWash(t, n);
+    });
 
     tex.dock = fpMakeTexture((t, n) => {
         t.fillStyle = '#E0D4C0';
@@ -545,7 +563,10 @@ function fpRenderScene(view) {
                 continue;
             }
             const cell = g[tr][tc];
-            const texture = cell === CLEAN ? tex.clean : cell === CHARGER ? tex.dock : tex.floor;
+            const onPad = cell !== CHARGER && chargingPadGrid && chargingPadGrid[tr][tc];
+            const texture = cell === CLEAN ? (onPad ? tex.cleanPad : tex.clean)
+                : cell === CHARGER ? tex.dock
+                : (onPad ? tex.floorPad : tex.floor);
             const tu = ((fx - tc) * TM) | 0;
             const tv = ((fy - tr) * TM) | 0;
             let shade = (tc + tr) & 1 ? 0.95 : 1.0; // faint checker so tiles can be counted
@@ -686,8 +707,9 @@ function fpDrawCompass(angle) {
 function fpDrawStatus() {
     const left = totalDirty - cleaned;
     const dockDist = chargerDistGrid ? chargerDistGrid[roomba.row][roomba.col] : -1;
-    const cost = LEVELS[currentLevel].batteryCost || 1;
-    const lowBattery = roomba.battery <= 20;
+    const cost = moveCost();
+    const max = batteryMax();
+    const lowBattery = isLowBattery();
     const needsDock = dockDist >= 0 && roomba.battery <= (dockDist + 2) * cost && dockDist > 0;
 
     ctx.save();
@@ -726,8 +748,9 @@ function fpDrawStatus() {
     ctx.fillStyle = '#222';
     roundRect(ctx, bx, by, bw, bh, 5);
     ctx.fill();
-    const pct = roomba.battery / 100;
+    const pct = Math.min(1, roomba.battery / max);
     let color = pct > 0.5 ? '#4CAF50' : pct > 0.2 ? '#FFC107' : '#F44336';
+    if (roomba.battery > max + 0.5) color = '#6EC6FF'; // overcharged
     if (lowBattery) {
         const pulse = 0.6 + 0.4 * Math.sin(chargerPulse * 0.25);
         ctx.globalAlpha = pulse;
@@ -741,7 +764,7 @@ function fpDrawStatus() {
     ctx.textAlign = 'right';
     ctx.font = 'bold 13px Segoe UI, sans-serif';
     ctx.fillStyle = color;
-    ctx.fillText(`Battery ${roomba.battery}%`, bx + bw, 43);
+    ctx.fillText(`Battery ${Math.round(roomba.battery)} / ${max}`, bx + bw, 43);
     ctx.restore();
 
     // Low battery: red vignette that breathes

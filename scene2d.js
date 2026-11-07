@@ -327,6 +327,7 @@ function drawScene(g, fades) {
     ensureSceneLayers();
     ctx.drawImage(scene.floor, 0, 0, CANVAS_W, CANVAS_H);
     drawTileStates(g, fades);
+    drawChargingPad();
     const lv = LEVELS[currentLevel];
     drawChargerTile(lv.charger.col * TILE, lv.charger.row * TILE);
     ctx.drawImage(scene.furniture, 0, 0, CANVAS_W, CANVAS_H);
@@ -358,6 +359,24 @@ function drawTileStates(g, fades) {
                     ctx.drawImage(scene.glaze, x, y, TILE, TILE);
                 }
             }
+        }
+    }
+}
+
+// Tiles that charge the vacuum thanks to the charging pad upgrade
+function drawChargingPad() {
+    if (!chargingPadGrid || padRadius() === 0) return;
+    const lv = LEVELS[currentLevel];
+    const pulse = 0.16 + 0.07 * Math.sin(chargerPulse * 0.05);
+    for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+            if (!chargingPadGrid[r][c] || (c === lv.charger.col && r === lv.charger.row)) continue;
+            const x = c * TILE, y = r * TILE;
+            ctx.fillStyle = `rgba(80, 150, 255, ${pulse})`;
+            ctx.fillRect(x, y, TILE, TILE);
+            ctx.strokeStyle = 'rgba(140, 190, 255, 0.55)';
+            ctx.lineWidth = 1.5;
+            ctx.strokeRect(x + 2, y + 2, TILE - 4, TILE - 4);
         }
     }
 }

@@ -1163,7 +1163,8 @@ function drawRoomba() {
 
     // Center CLEAN button with glow: the light colour normally, red when the battery is low
     ctx.save();
-    if (roomba.battery > 20) {
+    const batteryOk = !isLowBattery();
+    if (batteryOk) {
         ctx.shadowColor = lightHex;
         ctx.shadowBlur = 8;
     } else {
@@ -1171,7 +1172,7 @@ function drawRoomba() {
         ctx.shadowBlur = 6;
     }
     const btnGrad = ctx.createRadialGradient(0, -1, 0, 0, 0, 6);
-    if (roomba.battery > 20) {
+    if (batteryOk) {
         btnGrad.addColorStop(0, shadeColor(lightHex, 60));
         btnGrad.addColorStop(0.6, lightHex);
         btnGrad.addColorStop(1, shadeColor(lightHex, -50));
@@ -1606,21 +1607,33 @@ function drawOverlay() {
         ctx.font = '17px Segoe UI, sans-serif';
         ctx.fillText(`Tiles ${r.tileScore}  +  Bonus ${r.bonus}  =  ${score} total`, cx, cy + 12);
 
+        // Upgrade points earned (only new stars pay)
+        const earned = r.points | 0;
+        const available = progress.points | 0;
+        ctx.font = 'bold 15px Segoe UI, sans-serif';
+        ctx.fillStyle = earned > 0 ? '#FFD600' : '#999';
+        ctx.fillText(
+            earned > 0
+                ? `+${earned} upgrade point${earned === 1 ? '' : 's'}   ·   ${available} to spend (U)`
+                : `No new stars, no upgrade points   ·   ${available} to spend (U)`,
+            cx, cy + 40,
+        );
+
         ctx.fillStyle = '#00BFFF';
-        ctx.font = '16px Segoe UI, sans-serif';
-        ctx.fillText('W: watch the ghost run the par route', cx, cy + 58);
+        ctx.font = '15px Segoe UI, sans-serif';
+        ctx.fillText('G: watch the ghost run the par route', cx, cy + 70);
 
         if (currentLevel < LEVELS.length - 1) {
             ctx.fillStyle = '#A0C4FF';
             ctx.font = '18px Segoe UI, sans-serif';
-            ctx.fillText('SPACE or click the board: next level', cx, cy + 90);
+            ctx.fillText('SPACE or click the board: next level', cx, cy + 100);
         } else {
             ctx.fillStyle = '#FFD600';
-            ctx.font = 'bold 28px Segoe UI, sans-serif';
-            ctx.fillText('You Win! All levels complete!', cx, cy + 98);
-            ctx.font = '16px Segoe UI, sans-serif';
+            ctx.font = 'bold 24px Segoe UI, sans-serif';
+            ctx.fillText('You Win! All levels complete!', cx, cy + 104);
+            ctx.font = '15px Segoe UI, sans-serif';
             ctx.fillStyle = '#CCC';
-            ctx.fillText('Press R to play again', cx, cy + 128);
+            ctx.fillText('Press R to play again', cx, cy + 130);
         }
 
         ctx.restore();
@@ -1708,7 +1721,8 @@ function drawHelp() {
         ['3D view', 'V or the 3D View button. In 3D, left and right turn in place; up and down drive forward and back.'],
         ['Restart', 'R or the Restart button. Restarting a level also restarts its score.'],
         ['Next level', 'SPACE, or click the board, once a level is complete.'],
-        ['Ghost', 'W on the Level Complete screen replays the par route; V rides along in 3D. SPACE skips it.'],
+        ['Ghost', 'G or the Ghost button replays the par route at any time; V rides along in 3D. SPACE or G ends it.'],
+        ['Upgrades', 'Each new star on a level is a point. U or the Upgrades button spends them on the vacuum or the charger.'],
         ['Flashlight', 'F switches the vacuum\'s flashlight on and off. It lights the way ahead in both views.'],
         ['Design', 'The Design button opens colour wheels for the vacuum\'s lights and the flashlight.'],
         ['Sound', 'M or the Sound button mutes and unmutes.'],
@@ -1722,15 +1736,15 @@ function drawHelp() {
     ctx.textAlign = 'center';
     ctx.fillText('How to play', CANVAS_W / 2, 64);
     ctx.textAlign = 'left';
-    let y = 100;
+    let y = 94;
     for (const [key, text] of lines) {
         ctx.fillStyle = '#9ED8CC';
-        ctx.font = 'bold 14px Segoe UI, sans-serif';
-        ctx.fillText(key, 56, y);
+        ctx.font = 'bold 13px Segoe UI, sans-serif';
+        ctx.fillText(key, 52, y);
         ctx.fillStyle = '#EEE';
-        ctx.font = '14px Segoe UI, sans-serif';
-        wrapText(text, 160, y, CANVAS_W - 216, 18);
-        y += 44;
+        ctx.font = '13px Segoe UI, sans-serif';
+        wrapText(text, 150, y, CANVAS_W - 200, 17);
+        y += 41;
     }
     ctx.fillStyle = '#AAA';
     ctx.font = '13px Segoe UI, sans-serif';

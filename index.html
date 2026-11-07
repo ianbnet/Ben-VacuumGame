@@ -55,7 +55,20 @@
                 <button id="btnHelp" class="action-btn action-btn-quiet">Help</button>
                 <button id="btnMute" class="action-btn action-btn-quiet" aria-pressed="false">Sound on</button>
                 <button id="btnDesign" class="action-btn action-btn-quiet" aria-expanded="false" aria-controls="designPanel">Design</button>
+                <button id="btnUpgrades" class="action-btn action-btn-quiet" aria-expanded="false" aria-controls="upgradePanel">Upgrades</button>
+                <button id="btnGhost" class="action-btn action-btn-quiet">Ghost</button>
             </div>
+        </div>
+        <div id="upgradePanel" class="design-panel" hidden>
+            <div class="design-head">
+                <span class="stat-label">Upgrades &middot; <span id="upgradePoints">0</span> points to spend</span>
+                <div>
+                    <button id="btnUpgradeRefund" class="action-btn action-btn-quiet">Refund all</button>
+                    <button id="btnUpgradeClose" class="action-btn action-btn-quiet">Close</button>
+                </div>
+            </div>
+            <p class="upgrade-hint">Every new star you earn on a level is one point. Upgrades apply straight away.</p>
+            <div class="upgrade-groups" id="upgradeList"></div>
         </div>
         <div id="designPanel" class="design-panel" hidden>
             <div class="design-head">
@@ -78,11 +91,12 @@
                 </div>
             </div>
         </div>
-        <div id="legend">Arrows / WASD move (hold to keep going) &middot; V 3D view &middot; F flashlight &middot; R restart &middot; Space next level &middot; W ghost &middot; M sound &middot; H help</div>
+        <div id="legend">Arrows / WASD move (hold to keep going) &middot; V 3D view &middot; G ghost &middot; F flashlight &middot; U upgrades &middot; R restart &middot; Space next level &middot; M sound &middot; H help</div>
         <div id="levelSelect" role="group" aria-label="Level select"></div>
         <div id="srStatus" class="visually-hidden" aria-live="polite"></div>
     </div>
     <script src="core.js"></script>
+    <script src="upgrades.js"></script>
     <script src="design.js"></script>
     <script src="render2d.js"></script>
     <script src="scene2d.js"></script>

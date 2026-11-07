@@ -29,12 +29,13 @@ let dtFrames = 1;        // the same, in units of 60 fps frames
 let bannerText = '';
 let bannerTimer = 0;     // ms left to show the level banner
 let helpVisible = false;
-let chargerDistGrid = null; // BFS distance from every tile back to the dock, for the "dock N moves" hint
+let chargerDistGrid = null; // BFS distance from every tile to the nearest charging tile, for the "dock N moves" hint
+let chargingPadGrid = null; // 1 where a tile charges the vacuum (the dock, plus its pad once upgraded)
 let viewFade = 0;        // >0 while fading in after a 2D/3D switch
 
-// Saved progress (localStorage): highest level reached and the best result per level
+// Saved progress (localStorage): highest level reached, best result per level, upgrade points and levels
 const SAVE_KEY = 'ben-vacuum-game.progress.v1';
-let progress = { unlocked: 0, best: {}, bestScore: 0 };
+let progress = { unlocked: 0, best: {}, bestScore: 0, points: 0, upgrades: {} };
 
 // === FIRST-PERSON MODE ===
 let viewMode = 'TD'; // 'TD' = top-down, 'FP' = first-person
@@ -99,7 +100,7 @@ function initLevel(levelIndex) {
     roomba.col = level.charger.col;
     roomba.row = level.charger.row;
     roomba.dir = 'up';
-    roomba.battery = 100;
+    roomba.battery = batteryMax();
     roomba.drawX = level.charger.col * TILE + TILE / 2;
     roomba.drawY = level.charger.row * TILE + TILE / 2;
     // Keep the first-person camera in step with the Roomba's facing
@@ -131,10 +132,19 @@ function initLevel(levelIndex) {
     parApproachLen = parResult.approachLength;
     npcReplay.active = false;
 
-    // Obstacles never move, so the way home from every tile can be computed once
-    chargerDistGrid = bfsFromSource(grid, level.charger.col, level.charger.row);
-
+    applyUpgrades();
     buildLevelSelect();
+    updateUI();
+}
+
+// Everything that depends on the upgrade levels: which tiles charge, and how far home is from
+// every tile. Called on level start and again whenever an upgrade is bought.
+function applyUpgrades() {
+    if (!grid.length) return;
+    const tiles = chargingTiles();
+    chargingPadGrid = Array.from({ length: ROWS }, () => new Uint8Array(COLS));
+    for (const t of tiles) chargingPadGrid[t.row][t.col] = 1;
+    chargerDistGrid = bfsFromSources(grid, tiles);
     updateUI();
 }
 
@@ -149,6 +159,8 @@ function loadProgress() {
             progress.unlocked = Math.min(LEVELS.length - 1, Math.max(0, s.unlocked | 0));
             progress.best = s.best && typeof s.best === 'object' ? s.best : {};
             progress.bestScore = s.bestScore | 0;
+            progress.points = Math.max(0, s.points | 0);
+            progress.upgrades = sanitizeUpgrades(s.upgrades);
         }
     } catch (e) {
         // Storage blocked or corrupt: play without saving
@@ -235,9 +247,10 @@ function tryMove(dc, dr) {
     roombaWheelAngle += 0.5;
     noteMove();
 
-    const cost = LEVELS[currentLevel].batteryCost || 1;
+    const max = batteryMax();
+    const low = lowBatteryLevel();
     const batteryBefore = roomba.battery;
-    roomba.battery = Math.max(0, roomba.battery - cost);
+    roomba.battery = Math.max(0, roomba.battery - moveCost());
 
     if (grid[newRow][newCol] === DIRTY) {
         grid[newRow][newCol] = CLEAN;
@@ -248,16 +261,22 @@ function tryMove(dc, dr) {
         sound('clean');
     }
 
-    if (grid[newRow][newCol] === CHARGER) {
-        if (roomba.battery < 100) sound('dock');
-        roomba.battery = 100;
-    } else if (batteryBefore > 20 && roomba.battery <= 20) {
-        sound('lowBattery');
+    if (isChargingTile(newCol, newRow)) {
+        // The dock (or its pad) fills the battery; overcharge takes it past full
+        const target = max * overchargeFactor();
+        if (roomba.battery < target) {
+            if (roomba.battery < max) sound('dock');
+            roomba.battery = target;
+        }
+    } else {
+        // Solar cells trickle-charge on the move, but never past full
+        if (roomba.battery < max) roomba.battery = Math.min(max, roomba.battery + solarPerMove());
+        if (batteryBefore > low && roomba.battery <= low) sound('lowBattery');
     }
 
     if (cleaned >= totalDirty) {
         completeLevel();
-    } else if (roomba.battery <= 0) {
+    } else if (roomba.battery < 0.01) {
         gameState = 'GAME_OVER';
         stopHold();
         sound('gameOver');
@@ -282,12 +301,17 @@ function completeLevel() {
     const bonus = 200 + underPar * 10;
     const stars = moves <= parMoves ? 3 : moves <= parMoves * 1.25 ? 2 : 1;
     score += bonus;
-    levelResult = { moves, par: parMoves, bonus, stars, tileScore: cleaned * 10, at: chargerPulse };
+    // Upgrade points: one for every star earned on this level for the first time
+    const prevBest = progress.best[currentLevel];
+    const points = Math.max(0, stars - (prevBest ? prevBest.stars : 0));
+    progress.points = (progress.points | 0) + points;
+    levelResult = { moves, par: parMoves, bonus, stars, points, tileScore: cleaned * 10, at: chargerPulse };
     gameState = 'LEVEL_COMPLETE';
     stopHold();
     sound('levelComplete');
     recordLevelResult(currentLevel, levelResult);
     buildLevelSelect();
+    buildUpgradePanel();
 }
 
 // First person: left/right turn 90 degrees in place, up/down drive forward/back relative to facing.
@@ -404,13 +428,13 @@ const keyMap = {
     W: 'up', S: 'down', A: 'left', D: 'right',
 };
 
-// Keys pressed inside the design panel (colour wheels, the flashlight switch) belong to it
-function keyIsForDesignPanel(e) {
-    return !!(e.target && e.target.closest && e.target.closest('#designPanel'));
+// Keys pressed inside the design or upgrades panels (wheels, switches, buttons) belong to them
+function keyIsForPanel(e) {
+    return !!(e.target && e.target.closest && e.target.closest('#designPanel, #upgradePanel'));
 }
 
 document.addEventListener('keydown', (e) => {
-    if (keyIsForDesignPanel(e)) return;
+    if (keyIsForPanel(e)) return;
 
     // F: flashlight on / off
     if (e.key === 'f' || e.key === 'F') {
@@ -432,10 +456,17 @@ document.addEventListener('keydown', (e) => {
         return;
     }
 
-    // W key: watch par route when level complete, otherwise move up
-    if ((e.key === 'w' || e.key === 'W') && gameState === 'LEVEL_COMPLETE') {
+    // G: watch the ghost run the par route, any time; it brings you back where you were
+    if (e.key === 'g' || e.key === 'G') {
         e.preventDefault();
-        startParReplay();
+        if (gameState === 'PAR_REPLAY') endParReplay();
+        else startParReplay();
+        return;
+    }
+
+    // U: upgrades panel
+    if (e.key === 'u' || e.key === 'U') {
+        if (typeof toggleUpgradePanel === 'function') toggleUpgradePanel();
         return;
     }
 
@@ -443,8 +474,7 @@ document.addEventListener('keydown', (e) => {
     if (e.key === ' ') {
         e.preventDefault();
         if (gameState === 'PAR_REPLAY') {
-            npcReplay.active = false;
-            gameState = 'LEVEL_COMPLETE';
+            endParReplay();
             return;
         }
         if (gameState === 'LEVEL_COMPLETE') {
@@ -483,7 +513,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 document.addEventListener('keyup', (e) => {
-    if (keyIsForDesignPanel(e)) return;
+    if (keyIsForPanel(e)) return;
     const dir = keyMap[e.key];
     if (dir) {
         keysDown.delete(e.key);
@@ -507,7 +537,11 @@ window.addEventListener('blur', () => {
 });
 
 // === NPC PAR REPLAY ===
+// Can be watched before, during or after a level; it leaves the player's own game untouched
 function startParReplay() {
+    if (gameState !== 'PLAYING' && gameState !== 'LEVEL_COMPLETE') return;
+    npcReplay.returnState = gameState;
+    stopHold();
     gameState = 'PAR_REPLAY';
     // Reset the grid to dirty for the replay
     npcReplay.grid = buildLevelGrid(currentLevel);
@@ -534,8 +568,7 @@ function updateNpcReplay() {
 
     npcReplay.stepIndex++;
     if (npcReplay.stepIndex >= parPath.length) {
-        npcReplay.active = false;
-        gameState = 'LEVEL_COMPLETE';
+        endParReplay();
         return;
     }
 
@@ -572,6 +605,12 @@ function updateNpcReplay() {
     }
 }
 
+function endParReplay() {
+    npcReplay.active = false;
+    gameState = npcReplay.returnState || 'LEVEL_COMPLETE';
+    updateUI();
+}
+
 // === UI UPDATES ===
 function updateUI() {
     if (!elCleaned) return; // headless (tests) or before init
@@ -581,9 +620,11 @@ function updateUI() {
     elScore.textContent = score;
     elLevelNum.textContent = `${currentLevel + 1} · ${LEVELS[currentLevel].name}`;
 
-    const pct = roomba.battery;
+    const max = batteryMax();
+    const pct = Math.max(0, Math.min(100, (roomba.battery / max) * 100));
     elBatteryFill.style.width = pct + '%';
-    elBatteryText.textContent = pct + '%';
+    elBatteryText.textContent = `${Math.round(roomba.battery)} / ${max}`;
+    elBatteryFill.classList.toggle('over', roomba.battery > max + 0.5);
     if (pct > 50) {
         elBatteryFill.style.backgroundColor = '#4CAF50';
         elBatteryText.style.color = '#4CAF50';
@@ -599,16 +640,15 @@ function updateUI() {
 
     // How far home is, and whether the battery still covers it
     const dockDist = chargerDistGrid ? chargerDistGrid[roomba.row][roomba.col] : -1;
-    const cost = LEVELS[currentLevel].batteryCost || 1;
     if (elDockDist) {
         elDockDist.textContent = dockDist < 0 ? '--' : dockDist === 0 ? 'here' : `${dockDist} moves`;
-        elDockDist.classList.toggle('warn', dockDist > 0 && pct <= (dockDist + 2) * cost);
+        elDockDist.classList.toggle('warn', dockDist > 0 && roomba.battery <= (dockDist + 2) * moveCost());
     }
 
     // Screen-reader status: every ten tiles, and on every state change
     if (elSrStatus && (cleaned % 10 === 0 || gameState !== 'PLAYING')) {
         const state = gameState === 'LEVEL_COMPLETE' ? 'Level complete. ' : gameState === 'GAME_OVER' ? 'Out of battery. ' : '';
-        elSrStatus.textContent = `${state}${cleaned} of ${totalDirty} tiles cleaned, battery ${pct} percent, dock ${dockDist} moves away.`;
+        elSrStatus.textContent = `${state}${cleaned} of ${totalDirty} tiles cleaned, battery ${Math.round(roomba.battery)} of ${max}, dock ${dockDist} moves away.`;
     }
 }
 
@@ -741,6 +781,14 @@ document.addEventListener('DOMContentLoaded', () => {
             elBtnHelp.blur();
         });
     }
+    const elBtnGhost = document.getElementById('btnGhost');
+    if (elBtnGhost) {
+        elBtnGhost.addEventListener('click', () => {
+            if (gameState === 'PAR_REPLAY') endParReplay();
+            else startParReplay();
+            elBtnGhost.blur();
+        });
+    }
     const elBtnMute = document.getElementById('btnMute');
     if (elBtnMute && typeof audioToggleMute === 'function') {
         audioLoadMute();
@@ -792,6 +840,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     currentLevel = progress.unlocked; // resume at the furthest level reached
     initLevel(currentLevel);
+    if (typeof initUpgradeUI === 'function') initUpgradeUI();
     updateViewButtons();
     requestAnimationFrame(render);
 });
