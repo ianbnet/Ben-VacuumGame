@@ -59,7 +59,7 @@ const sandbox = {
 };
 sandbox.window = sandbox;
 vm.createContext(sandbox);
-for (const f of ['core.js', 'upgrades.js', 'design.js', 'game.js']) {
+for (const f of ['core.js', 'upgrades.js', 'design.js', 'render3d.js', 'game.js']) {
     vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), sandbox, { filename: f });
 }
 const G = (expr) => vm.runInContext(expr, sandbox);
@@ -281,6 +281,23 @@ G('selectLevel(0); for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++)
 check(G('levelResult.points') === 0 && G('progress.points') === 3, 'repeating a result earns nothing');
 check(JSON.parse(storage.get('ben-vacuum-game.progress.v1')).points === 3, 'points are saved');
 G('progress.points = 0; progress.upgrades = sanitizeUpgrades(null); saveProgress();');
+
+section('3D lightmap');
+const lm = G('fpBakeLightmap(0)');
+check(lm.w === G('COLS * FP_LIGHT_CELLS') && lm.h === G('ROWS * FP_LIGHT_CELLS') && lm.data.length === lm.w * lm.h * 3, 'lightmap covers the room at the cell resolution');
+const cellAt = (x, y) => { const i = ((y * lm.n) | 0) * lm.w + ((x * lm.n) | 0); return [lm.data[i * 3], lm.data[i * 3 + 1], lm.data[i * 3 + 2]]; };
+const nearWindow = cellAt(12.5, 1.5), farCorner = cellAt(1.5, 10.5);
+check(nearWindow[0] > farCorner[0] * 1.4, 'the floor by the window is much brighter than the far corner');
+check(nearWindow[0] > nearWindow[2], 'window light is warm');
+const dock = G('LEVELS[0].charger');
+const atDock = cellAt(dock.col + 0.5, dock.row + 0.5), awayFromDock = cellAt(dock.col - 3.5, dock.row + 0.5);
+check(atDock[2] - atDock[0] > awayFromDock[2] - awayFromDock[0], 'the dock adds blue light around it');
+// Level 1 couch spans columns 5-7 on row 2: the tile just south of it is shaded from the window
+const underCouch = cellAt(6.5, 3.5), openFloor = cellAt(6.5, 6.5);
+check(underCouch[0] < openFloor[0], 'furniture casts a shadow away from the window');
+let finite = true;
+for (let i = 0; i < lm.data.length; i++) if (!Number.isFinite(lm.data[i]) || lm.data[i] < 0 || lm.data[i] > 1.4001) { finite = false; break; }
+check(finite, 'every light value is finite and within range');
 
 console.log(`\n${passes} passed, ${failures} failed`);
 process.exit(failures ? 1 : 0);

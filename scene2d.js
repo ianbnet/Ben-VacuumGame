@@ -74,15 +74,16 @@ function ensureSceneLayers() {
 // --- Floor -------------------------------------------------------------------------------
 
 // Hardwood planks: half-tile-high boards of varying length and tone, grain, knots and seams
-function paintWoodFloor(c, seed) {
+function paintWoodFloor(c, seed, tilePx = TILE, cols = COLS, rows = ROWS) {
     const rnd = seededRandom(seed);
-    const plankH = TILE / 2;
+    const W = cols * tilePx, H = rows * tilePx;
+    const plankH = tilePx / 2;
     const tones = ['#D8BC92', '#CDB286', '#E0C79E', '#C9AA7E', '#D4B78E', '#DCC39A', '#C4A478'];
-    for (let row = 0; row < ROWS * 2; row++) {
+    for (let row = 0; row < rows * 2; row++) {
         const y = row * plankH;
-        let x = -rnd() * TILE * 2;
-        while (x < CANVAS_W) {
-            const len = TILE * (1.4 + rnd() * 2.6);
+        let x = -rnd() * tilePx * 2;
+        while (x < W) {
+            const len = tilePx * (1.4 + rnd() * 2.6);
             const tone = tones[Math.floor(rnd() * tones.length)];
             const g = c.createLinearGradient(x, y, x + len, y);
             g.addColorStop(0, shadeColor(tone, -8));
@@ -123,29 +124,29 @@ function paintWoodFloor(c, seed) {
             x += len;
         }
         c.fillStyle = 'rgba(90, 65, 40, 0.32)';
-        c.fillRect(0, y + plankH - 1, CANVAS_W, 1);
+        c.fillRect(0, y + plankH - 1, W, 1);
     }
     // a soft sheen across the room
-    const sheen = c.createLinearGradient(0, 0, CANVAS_W, CANVAS_H);
+    const sheen = c.createLinearGradient(0, 0, W, H);
     sheen.addColorStop(0, 'rgba(255,255,255,0)');
     sheen.addColorStop(0.3, 'rgba(255,255,255,0.09)');
     sheen.addColorStop(0.5, 'rgba(255,255,255,0)');
     sheen.addColorStop(1, 'rgba(0,0,0,0.07)');
     c.fillStyle = sheen;
-    c.fillRect(0, 0, CANVAS_W, CANVAS_H);
+    c.fillRect(0, 0, W, H);
     // faint tile grid, so moves stay countable
     c.strokeStyle = 'rgba(60, 40, 20, 0.09)';
     c.lineWidth = 1;
-    for (let i = 1; i < COLS; i++) {
+    for (let i = 1; i < cols; i++) {
         c.beginPath();
-        c.moveTo(i * TILE + 0.5, 0);
-        c.lineTo(i * TILE + 0.5, CANVAS_H);
+        c.moveTo(i * tilePx + 0.5, 0);
+        c.lineTo(i * tilePx + 0.5, H);
         c.stroke();
     }
-    for (let i = 1; i < ROWS; i++) {
+    for (let i = 1; i < rows; i++) {
         c.beginPath();
-        c.moveTo(0, i * TILE + 0.5);
-        c.lineTo(CANVAS_W, i * TILE + 0.5);
+        c.moveTo(0, i * tilePx + 0.5);
+        c.lineTo(W, i * tilePx + 0.5);
         c.stroke();
     }
 }
@@ -173,63 +174,68 @@ function buildFloorLayer() {
     return L.canvas;
 }
 
-// Dust on tiles that still need cleaning: three variants of fluff, crumbs and a stray hair
-function buildDustSprites() {
-    const out = [];
-    for (let v = 0; v < 3; v++) {
-        out.push(makeTileSprite((t) => {
-            const rnd = seededRandom(77 + v * 31);
-            for (let i = 0; i < 4; i++) {
-                const x = 6 + rnd() * 36, y = 6 + rnd() * 36, r = 2.5 + rnd() * 3.5;
-                const g = t.createRadialGradient(x, y, 0, x, y, r);
-                g.addColorStop(0, 'rgba(165, 155, 145, 0.5)');
-                g.addColorStop(1, 'rgba(165, 155, 145, 0)');
-                t.fillStyle = g;
-                t.beginPath();
-                t.arc(x, y, r, 0, Math.PI * 2);
-                t.fill();
-            }
-            for (let i = 0; i < 8; i++) {
-                t.fillStyle = `rgba(${100 + (rnd() * 40) | 0}, ${70 + (rnd() * 30) | 0}, ${40 + (rnd() * 20) | 0}, ${0.35 + rnd() * 0.3})`;
-                t.beginPath();
-                t.arc(4 + rnd() * 40, 4 + rnd() * 40, 0.7 + rnd() * 1.1, 0, Math.PI * 2);
-                t.fill();
-            }
-            if (v !== 1) {
-                t.strokeStyle = 'rgba(60, 50, 45, 0.4)';
-                t.lineWidth = 0.7;
-                const x0 = 6 + rnd() * 34, y0 = 6 + rnd() * 34;
-                t.beginPath();
-                t.moveTo(x0, y0);
-                t.bezierCurveTo(x0 + rnd() * 20 - 10, y0 + rnd() * 20 - 10, x0 + rnd() * 20 - 10, y0 + rnd() * 20 - 10, x0 + rnd() * 16 - 8, y0 + rnd() * 16 - 8);
-                t.stroke();
-            }
-        }));
+// Dust on a tile that still needs cleaning: fluff, crumbs and a stray hair, in three variants.
+// Drawn into an n-pixel square; shared with the 3D floor textures.
+function paintDust(t, n, v) {
+    const k = n / TILE;
+    const rnd = seededRandom(77 + v * 31);
+    for (let i = 0; i < 4; i++) {
+        const x = (6 + rnd() * 36) * k, y = (6 + rnd() * 36) * k, r = (2.5 + rnd() * 3.5) * k;
+        const g = t.createRadialGradient(x, y, 0, x, y, r);
+        g.addColorStop(0, 'rgba(165, 155, 145, 0.5)');
+        g.addColorStop(1, 'rgba(165, 155, 145, 0)');
+        t.fillStyle = g;
+        t.beginPath();
+        t.arc(x, y, r, 0, Math.PI * 2);
+        t.fill();
     }
-    return out;
+    for (let i = 0; i < 8; i++) {
+        t.fillStyle = `rgba(${100 + (rnd() * 40) | 0}, ${70 + (rnd() * 30) | 0}, ${40 + (rnd() * 20) | 0}, ${0.35 + rnd() * 0.3})`;
+        t.beginPath();
+        t.arc((4 + rnd() * 40) * k, (4 + rnd() * 40) * k, (0.7 + rnd() * 1.1) * k, 0, Math.PI * 2);
+        t.fill();
+    }
+    if (v !== 1) {
+        t.strokeStyle = 'rgba(60, 50, 45, 0.4)';
+        t.lineWidth = 0.7 * k;
+        const x0 = (6 + rnd() * 34) * k, y0 = (6 + rnd() * 34) * k;
+        t.beginPath();
+        t.moveTo(x0, y0);
+        t.bezierCurveTo(x0 + (rnd() * 20 - 10) * k, y0 + (rnd() * 20 - 10) * k, x0 + (rnd() * 20 - 10) * k, y0 + (rnd() * 20 - 10) * k, x0 + (rnd() * 16 - 8) * k, y0 + (rnd() * 16 - 8) * k);
+        t.stroke();
+    }
 }
 
 // Polish over a cleaned tile: the wood shows through a mint glaze with a gloss highlight
+function paintGlaze(t, n) {
+    const k = n / TILE;
+    t.fillStyle = 'rgba(108, 224, 172, 0.6)';
+    t.fillRect(0, 0, n, n);
+    const g = t.createLinearGradient(0, 0, n, n);
+    g.addColorStop(0, 'rgba(255,255,255,0)');
+    g.addColorStop(0.32, 'rgba(255,255,255,0.24)');
+    g.addColorStop(0.5, 'rgba(255,255,255,0.05)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    t.fillStyle = g;
+    t.fillRect(0, 0, n, n);
+    const s = t.createRadialGradient(12 * k, 10 * k, 0, 12 * k, 10 * k, 26 * k);
+    s.addColorStop(0, 'rgba(255,255,255,0.22)');
+    s.addColorStop(1, 'rgba(255,255,255,0)');
+    t.fillStyle = s;
+    t.fillRect(0, 0, n, n);
+    t.strokeStyle = 'rgba(30, 110, 80, 0.28)';
+    t.lineWidth = k;
+    t.strokeRect(0.5 * k, 0.5 * k, n - k, n - k);
+}
+
+function buildDustSprites() {
+    const out = [];
+    for (let v = 0; v < 3; v++) out.push(makeTileSprite((t) => paintDust(t, TILE, v)));
+    return out;
+}
+
 function buildGlazeTile() {
-    return makeTileSprite((t) => {
-        t.fillStyle = 'rgba(108, 224, 172, 0.6)';
-        t.fillRect(0, 0, TILE, TILE);
-        const g = t.createLinearGradient(0, 0, TILE, TILE);
-        g.addColorStop(0, 'rgba(255,255,255,0)');
-        g.addColorStop(0.32, 'rgba(255,255,255,0.24)');
-        g.addColorStop(0.5, 'rgba(255,255,255,0.05)');
-        g.addColorStop(1, 'rgba(255,255,255,0)');
-        t.fillStyle = g;
-        t.fillRect(0, 0, TILE, TILE);
-        const s = t.createRadialGradient(12, 10, 0, 12, 10, 26);
-        s.addColorStop(0, 'rgba(255,255,255,0.22)');
-        s.addColorStop(1, 'rgba(255,255,255,0)');
-        t.fillStyle = s;
-        t.fillRect(0, 0, TILE, TILE);
-        t.strokeStyle = 'rgba(30, 110, 80, 0.28)';
-        t.lineWidth = 1;
-        t.strokeRect(0.5, 0.5, TILE - 1, TILE - 1);
-    });
+    return makeTileSprite((t) => paintGlaze(t, TILE));
 }
 
 // --- Furniture ---------------------------------------------------------------------------

@@ -36,7 +36,7 @@ The on-screen d-pad, level buttons and panel buttons do the same things and work
 | `core.js` | Constants, the obstacle catalogue, the six levels, and the par solver (BFS plus greedy nearest-tile). No DOM. |
 | `game.js` | Game state, level setup, movement rules, input, saved progress, level select, the frame loop. |
 | `render2d.js` | The top-down view: floor, dock, furniture, Roomba, ghost, overlays, banner, help, ambient effects. |
-| `render3d.js` | The first-person view: a software raycaster into an `ImageData` buffer with textured walls, floor and ceiling, see-over furniture, sprites, and the in-view HUD. |
+| `render3d.js` | The first-person view: a software raycaster into an `ImageData` buffer at up to 1.5x the canvas size, with a baked lightmap (window, lamp, dock, ambient occlusion), plaster and brick materials, a real window, see-over furniture, sprites, polished-floor reflections, dust motes, bloom and grade, and the dive transition. |
 | `audio.js` | Synthesised sound effects and the motor hum (Web Audio, no files). |
 | `upgrades.js` | The upgrade catalogue (efficient motor, bigger battery, solar cells, charging pad, overcharge), points and the Upgrades panel. |
 | `design.js` | The Design panel: colour wheels for the vacuum's lights and flashlight, saved settings. |

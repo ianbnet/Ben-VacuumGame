@@ -31,7 +31,6 @@ let bannerTimer = 0;     // ms left to show the level banner
 let helpVisible = false;
 let chargerDistGrid = null; // BFS distance from every tile to the nearest charging tile, for the "dock N moves" hint
 let chargingPadGrid = null; // 1 where a tile charges the vacuum (the dock, plus its pad once upgraded)
-let viewFade = 0;        // >0 while fading in after a 2D/3D switch
 
 // Saved progress (localStorage): highest level reached, best result per level, upgrade points and levels
 const SAVE_KEY = 'ben-vacuum-game.progress.v1';
@@ -135,6 +134,8 @@ function initLevel(levelIndex) {
     applyUpgrades();
     buildLevelSelect();
     updateUI();
+    // Get the 3D view ready for this level while the banner is up
+    if (typeof fpWarmUp === 'function' && typeof requestAnimationFrame === 'function') setTimeout(fpWarmUp, 80);
 }
 
 // Everything that depends on the upgrade levels: which tiles charge, and how far home is from
@@ -381,7 +382,7 @@ function toggleView() {
         fpTargetAngle = FP_ANGLE_MAP[roomba.dir];
         fpAngle = fpTargetAngle;
     }
-    viewFade = 1;
+    if (typeof fpStartDive === 'function') fpStartDive(viewMode === 'FP' ? 1 : -1);
     stopHold();
     updateViewButtons();
 }
@@ -712,15 +713,8 @@ function renderFrame(timestamp) {
         drawOverlay();
     }
 
-    // Short fade-in after switching views
-    if (viewFade > 0) {
-        ctx.save();
-        ctx.globalAlpha = Math.min(1, viewFade);
-        ctx.fillStyle = '#000';
-        ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-        ctx.restore();
-        viewFade -= dtMs / 240;
-    }
+    // Dive into, or climb out of, the first-person view
+    if (typeof fpDrawDive === 'function') fpDrawDive();
 
     drawBanner();
     if (helpVisible) drawHelp();
@@ -843,4 +837,5 @@ document.addEventListener('DOMContentLoaded', () => {
     if (typeof initUpgradeUI === 'function') initUpgradeUI();
     updateViewButtons();
     requestAnimationFrame(render);
+    if (typeof fpWarmUp === 'function') setTimeout(fpWarmUp, 400);
 });
