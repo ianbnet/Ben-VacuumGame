@@ -38,6 +38,7 @@ The on-screen d-pad, level buttons and panel buttons do the same things and work
 | `render3d.js` | The first-person view: a software raycaster into an `ImageData` buffer with textured walls, floor and ceiling, see-over furniture, sprites, and the in-view HUD. |
 | `audio.js` | Synthesised sound effects and the motor hum (Web Audio, no files). |
 | `design.js` | The Design panel: colour wheels for the vacuum's lights and flashlight, saved settings. |
+| `scene2d.js` | Cached 2D layers: plank floor, furniture with cast shadows, window light; tile dust and polish, dust puffs, bokeh. |
 | `serve.py` | A no-cache static server for local play. |
 | `tests/run.js` | Headless checks for the level data, the solver and the movement rules. |
 

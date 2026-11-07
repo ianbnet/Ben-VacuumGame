@@ -430,3 +430,12 @@ const DIR_DELTAS = {
     right: { dc: 1, dr: 0 },
 };
 const OPPOSITE_DIR = { up: 'down', down: 'up', left: 'right', right: 'left' };
+
+// Deterministic pseudo-random generator, so procedural artwork looks the same every load
+function seededRandom(seed) {
+    let s = seed >>> 0;
+    return () => {
+        s = (s * 1664525 + 1013904223) >>> 0;
+        return s / 4294967296;
+    };
+}

@@ -282,7 +282,7 @@ function completeLevel() {
     const bonus = 200 + underPar * 10;
     const stars = moves <= parMoves ? 3 : moves <= parMoves * 1.25 ? 2 : 1;
     score += bonus;
-    levelResult = { moves, par: parMoves, bonus, stars, tileScore: cleaned * 10 };
+    levelResult = { moves, par: parMoves, bonus, stars, tileScore: cleaned * 10, at: chargerPulse };
     gameState = 'LEVEL_COMPLETE';
     stopHold();
     sound('levelComplete');
@@ -648,13 +648,11 @@ function renderFrame(timestamp) {
             // Ride along with the ghost
             renderFirstPerson(fpGhostView());
         } else {
-            drawNpcGrid();
-            drawBaseboards();
-            drawObstacles();
+            drawScene(npcReplay.grid, null);
             drawNpcTrail();
-            drawRoomVignette();
-            drawSunlight();
+            drawLighting();
             drawDustMotes();
+            drawBokeh();
             drawNpcVacuum();
         }
         if (gameState === 'PAR_REPLAY') drawNpcOverlay();
@@ -663,14 +661,13 @@ function renderFrame(timestamp) {
         renderFirstPerson();
         drawOverlay();
     } else {
-        drawGrid();
-        drawBaseboards();
-        drawObstacles();
+        drawScene(grid, tileCleanFade);
         drawCleanAnimations();
-        drawRoomVignette();
-        drawSunlight();
+        drawLighting();
         drawDustMotes();
+        drawBokeh();
         drawFlashlight2D();
+        drawDustPuffs();
         drawRoomba();
         drawOverlay();
     }

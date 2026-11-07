@@ -191,6 +191,17 @@ function drawChargerTile(x, y) {
     ctx.fillStyle = glowGrad;
     ctx.fillRect(x, y, TILE, TILE);
 
+    // A ring of light spreading out from the dock
+    const ringT = (chargerPulse * 0.012) % 1;
+    ctx.save();
+    ctx.globalAlpha = (1 - ringT) * 0.45;
+    ctx.strokeStyle = '#6EC6FF';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(x + TILE / 2, y + TILE / 2, 8 + ringT * 28, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+
     // Shadow under dock
     ctx.fillStyle = 'rgba(0,0,0,0.18)';
     ctx.beginPath();
@@ -1008,10 +1019,26 @@ function drawRoomba() {
     ctx.save();
     ctx.translate(x, y);
 
-    // Ground shadow (soft ellipse)
-    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    // Soft glow in the light colour spilling onto the floor
+    {
+        const [lr, lg, lb] = design.lightRgb;
+        const pulse = 0.2 + 0.08 * Math.sin(chargerPulse * 0.08);
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        const glow = ctx.createRadialGradient(0, 0, r * 0.4, 0, 0, r * 2.1);
+        glow.addColorStop(0, `rgba(${lr},${lg},${lb},${pulse})`);
+        glow.addColorStop(1, `rgba(${lr},${lg},${lb},0)`);
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.arc(0, 0, r * 2.1, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+
+    // Ground shadow (soft ellipse, cast down-left like the furniture)
+    ctx.fillStyle = 'rgba(0,0,0,0.28)';
     ctx.beginPath();
-    ctx.ellipse(1, 3, r + 1, r * 0.75, 0, 0, Math.PI * 2);
+    ctx.ellipse(-3, 4, r + 2, r * 0.8, 0, 0, Math.PI * 2);
     ctx.fill();
 
     // Bump flash glow
@@ -1067,11 +1094,15 @@ function drawRoomba() {
     accentGrad.addColorStop(0, shadeColor(lightHex, -24));
     accentGrad.addColorStop(0.5, lightHex);
     accentGrad.addColorStop(1, shadeColor(lightHex, -24));
+    ctx.save();
+    ctx.shadowColor = lightHex;
+    ctx.shadowBlur = (8 + 4 * Math.sin(chargerPulse * 0.08)) * canvasDpr;
     ctx.strokeStyle = accentGrad;
     ctx.lineWidth = 2.5;
     ctx.beginPath();
     ctx.arc(0, 0, r - 6, 0, Math.PI * 2);
     ctx.stroke();
+    ctx.restore();
 
     // Inner plate - slightly lighter
     const innerGrad = ctx.createRadialGradient(-3, -3, 0, 0, 0, r - 7);
@@ -1531,19 +1562,39 @@ function drawOverlay() {
     const cx = CANVAS_W / 2;
     const cy = CANVAS_H / 2;
     if (gameState === 'LEVEL_COMPLETE') {
-        const r = levelResult || { moves, par: parMoves, bonus: 0, stars: 1, tileScore: cleaned * 10 };
+        const r = levelResult || { moves, par: parMoves, bonus: 0, stars: 1, tileScore: cleaned * 10, at: 0 };
         ctx.save();
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
         ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+        drawCard(cx - 270, cy - 150, 540, 300, '#4CAF50');
         ctx.textAlign = 'center';
 
-        ctx.fillStyle = '#4CAF50';
+        ctx.fillStyle = '#5CD36A';
         ctx.font = 'bold 40px Segoe UI, sans-serif';
         ctx.fillText('Level Complete!', cx, cy - 105);
 
-        ctx.fillStyle = '#FFD600';
-        ctx.font = '36px Segoe UI, sans-serif';
-        ctx.fillText('★'.repeat(r.stars) + '☆'.repeat(3 - r.stars), cx, cy - 58);
+        // Stars pop in one after another
+        const since = chargerPulse - (r.at || 0);
+        for (let i = 0; i < 3; i++) {
+            const s = Math.max(0, Math.min(1, (since - i * 14) / 12));
+            const scale = s < 1 ? 0.3 + 0.7 * s + 0.35 * Math.sin(s * Math.PI) : 1;
+            const earned = i < r.stars;
+            ctx.save();
+            ctx.globalAlpha = s;
+            ctx.translate(cx + (i - 1) * 48, cy - 66);
+            ctx.scale(scale, scale);
+            ctx.textBaseline = 'middle';
+            ctx.font = '40px Segoe UI, sans-serif';
+            if (earned) {
+                ctx.shadowColor = '#FFD600';
+                ctx.shadowBlur = 18 * canvasDpr;
+                ctx.fillStyle = '#FFD600';
+            } else {
+                ctx.fillStyle = 'rgba(255,255,255,0.22)';
+            }
+            ctx.fillText(earned ? '★' : '☆', 0, 0);
+            ctx.restore();
+        }
 
         const diff = r.par - r.moves;
         const parText = diff > 0 ? `${diff} under par` : diff < 0 ? `${-diff} over par` : 'exactly par';
@@ -1575,21 +1626,48 @@ function drawOverlay() {
         ctx.restore();
     } else if (gameState === 'GAME_OVER') {
         ctx.save();
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
         ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+        drawCard(cx - 250, cy - 90, 500, 180, '#F44336');
 
-        ctx.fillStyle = '#F44336';
+        ctx.fillStyle = '#FF6B5B';
         ctx.font = 'bold 40px Segoe UI, sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText('Out of Battery!', cx, cy - 20);
+        ctx.fillText('Out of Battery!', cx, cy - 22);
 
         ctx.fillStyle = '#FFF';
         ctx.font = '18px Segoe UI, sans-serif';
-        ctx.fillText('Get back to the dock before it runs out next time.', cx, cy + 20);
+        ctx.fillText('Get back to the dock before it runs out next time.', cx, cy + 18);
+        ctx.fillStyle = '#CCC';
+        ctx.font = '16px Segoe UI, sans-serif';
         ctx.fillText('Press R or tap Restart', cx, cy + 50);
 
         ctx.restore();
     }
+}
+
+// A dark rounded card with a drop shadow and a coloured accent along the top
+function drawCard(x, y, w, h, accent) {
+    ctx.save();
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
+    ctx.shadowBlur = 40 * canvasDpr;
+    ctx.shadowOffsetY = 12 * canvasDpr;
+    ctx.fillStyle = 'rgba(18, 20, 30, 0.94)';
+    roundRect(ctx, x, y, w, h, 16);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetY = 0;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+    ctx.lineWidth = 1;
+    roundRect(ctx, x + 0.5, y + 0.5, w - 1, h - 1, 16);
+    ctx.stroke();
+    const g = ctx.createLinearGradient(x, 0, x + w, 0);
+    g.addColorStop(0, 'rgba(255,255,255,0)');
+    g.addColorStop(0.5, accent);
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(x + 24, y, w - 48, 2);
+    ctx.restore();
 }
 
 // Level-name banner shown for the first few seconds of a level
@@ -1609,9 +1687,7 @@ function drawBanner() {
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.textAlign = 'center';
-    ctx.fillStyle = 'rgba(20, 20, 28, 0.84)';
-    roundRect(ctx, cx - boxW / 2, y, boxW, boxH, 10);
-    ctx.fill();
+    drawCard(cx - boxW / 2, y, boxW, boxH, '#9ED8CC');
     ctx.fillStyle = '#9ED8CC';
     ctx.font = 'bold 13px Segoe UI, sans-serif';
     ctx.fillText(`LEVEL ${currentLevel + 1} OF ${LEVELS.length}`, cx, y + 26);
@@ -1813,33 +1889,33 @@ function drawBaseboards() {
 }
 
 function drawRoomVignette() {
-    // Corner shadows for depth
-    const cornerSize = 120;
+    // Corner shadows for depth; the lit corner (top right, by the window) stays brighter
+    const cornerSize = 170;
 
     // Top-left
     let g = ctx.createRadialGradient(0, 0, 0, 0, 0, cornerSize);
-    g.addColorStop(0, 'rgba(0,0,0,0.12)');
+    g.addColorStop(0, 'rgba(0,0,0,0.22)');
     g.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, cornerSize, cornerSize);
 
     // Top-right
     g = ctx.createRadialGradient(CANVAS_W, 0, 0, CANVAS_W, 0, cornerSize);
-    g.addColorStop(0, 'rgba(0,0,0,0.1)');
+    g.addColorStop(0, 'rgba(0,0,0,0.08)');
     g.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = g;
     ctx.fillRect(CANVAS_W - cornerSize, 0, cornerSize, cornerSize);
 
     // Bottom-left
     g = ctx.createRadialGradient(0, CANVAS_H, 0, 0, CANVAS_H, cornerSize);
-    g.addColorStop(0, 'rgba(0,0,0,0.1)');
+    g.addColorStop(0, 'rgba(0,0,0,0.24)');
     g.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = g;
     ctx.fillRect(0, CANVAS_H - cornerSize, cornerSize, cornerSize);
 
     // Bottom-right
     g = ctx.createRadialGradient(CANVAS_W, CANVAS_H, 0, CANVAS_W, CANVAS_H, cornerSize);
-    g.addColorStop(0, 'rgba(0,0,0,0.08)');
+    g.addColorStop(0, 'rgba(0,0,0,0.16)');
     g.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = g;
     ctx.fillRect(CANVAS_W - cornerSize, CANVAS_H - cornerSize, cornerSize, cornerSize);
