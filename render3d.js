@@ -20,6 +20,17 @@ const FP_SPRITE_SIZE = { plant: { w: 0.8, h: 0.95 }, chair: { w: 0.85, h: 0.7 } 
 const FP_BOTTOM_FACTORS = { table: 0.42 };  // raised slabs you can see under; a Roomba is lower than a table top
 const FP_MINIMAP_SCALE = 9;
 
+// Camera field of view and how tall each obstacle type stands, as a fraction of a wall
+const FP_FOV = Math.PI / 3; // 60 degree field of view
+const FP_HEIGHT_FACTORS = {
+    wall: 1.0,
+    couch: 0.55,
+    table: 0.5,
+    chair: 0.65,
+    plant: 0.9,
+    petbed: 0.25,
+};
+
 let fp3d = null; // renderer state: offscreen canvas, pixel buffer, textures
 
 function lerpAngle(from, to, t) {
@@ -321,6 +332,7 @@ function initFirstPerson() {
 
 // World positions of the plants and chairs in the current level
 function fpLevelSprites() {
+    if (!fp3d) initFirstPerson(); // the ghost view can be built before the first 3D frame
     if (fp3d.spriteLevel !== currentLevel) {
         fp3d.levelSprites = [];
         for (const obs of LEVELS[currentLevel].obstacles) {
