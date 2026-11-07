@@ -1,421 +1,10 @@
-// === CONSTANTS ===
-const TILE = 48;
-const COLS = 15;
-const ROWS = 12;
-const CANVAS_W = COLS * TILE;
-const CANVAS_H = ROWS * TILE;
-
-const DIRTY = 0;
-const CLEAN = 1;
-const OBSTACLE = 2;
-const CHARGER = 3;
-
-const MOVE_INTERVAL = 120; // ms between moves when holding
-
-const COLORS = {
-    dirty: '#E8D5B7',
-    clean: '#B8E6C8',
-    gridLine: '#D0C8B8',
-    charger: '#A0C4FF',
-    background: '#2C2C2C',
-};
-
-// === OBSTACLE CATALOG ===
-const OBS_TYPES = {
-    couch:  { color: '#5D4037', accent: '#795548', label: 'Couch' },
-    table:  { color: '#8D6E63', accent: '#A1887F', label: 'Table' },
-    chair:  { color: '#757575', accent: '#9E9E9E', label: 'Chair' },
-    plant:  { color: '#6D4C41', accent: '#4CAF50', label: 'Plant' },
-    wall:   { color: '#424242', accent: '#616161', label: 'Wall' },
-    petbed: { color: '#E57373', accent: '#EF9A9A', label: 'Pet Bed' },
-};
-
-// === LEVEL DATA ===
-const LEVELS = [
-    {
-        name: 'Living Room',
-        batteryCost: 1,
-        charger: { col: 14, row: 11 },
-        obstacles: [
-            { type: 'couch', col: 5, row: 2, w: 3, h: 1 },
-            { type: 'table', col: 10, row: 5, w: 2, h: 2 },
-            { type: 'chair', col: 3, row: 7, w: 1, h: 1 },
-            { type: 'plant', col: 0, row: 0, w: 1, h: 1 },
-            { type: 'plant', col: 14, row: 0, w: 1, h: 1 },
-        ],
-    },
-    {
-        name: 'Bedroom',
-        batteryCost: 1,
-        charger: { col: 0, row: 11 },
-        obstacles: [
-            { type: 'couch', col: 1, row: 1, w: 3, h: 1 },
-            { type: 'table', col: 7, row: 0, w: 2, h: 2 },
-            { type: 'table', col: 6, row: 5, w: 2, h: 2 },
-            { type: 'chair', col: 13, row: 3, w: 1, h: 1 },
-            { type: 'chair', col: 5, row: 9, w: 1, h: 1 },
-            { type: 'plant', col: 14, row: 0, w: 1, h: 1 },
-            { type: 'plant', col: 0, row: 5, w: 1, h: 1 },
-            { type: 'petbed', col: 11, row: 9, w: 2, h: 1 },
-        ],
-    },
-    {
-        name: 'Kitchen',
-        batteryCost: 1,
-        charger: { col: 7, row: 11 },
-        obstacles: [
-            { type: 'table', col: 6, row: 4, w: 2, h: 2 },
-            { type: 'chair', col: 5, row: 4, w: 1, h: 1 },
-            { type: 'chair', col: 8, row: 4, w: 1, h: 1 },
-            { type: 'chair', col: 5, row: 5, w: 1, h: 1 },
-            { type: 'chair', col: 8, row: 5, w: 1, h: 1 },
-            { type: 'wall', col: 0, row: 0, w: 1, h: 1 },
-            { type: 'wall', col: 1, row: 0, w: 1, h: 1 },
-            { type: 'wall', col: 2, row: 0, w: 1, h: 1 },
-            { type: 'wall', col: 3, row: 0, w: 1, h: 1 },
-            { type: 'wall', col: 0, row: 1, w: 1, h: 1 },
-            { type: 'wall', col: 0, row: 2, w: 1, h: 1 },
-            { type: 'couch', col: 11, row: 1, w: 3, h: 1 },
-            { type: 'plant', col: 14, row: 8, w: 1, h: 1 },
-            { type: 'plant', col: 0, row: 10, w: 1, h: 1 },
-            { type: 'petbed', col: 12, row: 9, w: 2, h: 1 },
-            { type: 'wall', col: 3, row: 8, w: 1, h: 1 },
-            { type: 'wall', col: 3, row: 9, w: 1, h: 1 },
-            { type: 'wall', col: 3, row: 10, w: 1, h: 1 },
-        ],
-    },
-    {
-        name: 'Office',
-        batteryCost: 2,
-        charger: { col: 14, row: 0 },
-        obstacles: [
-            { type: 'table', col: 1, row: 1, w: 2, h: 2 },
-            { type: 'table', col: 12, row: 5, w: 2, h: 2 },
-            { type: 'chair', col: 0, row: 1, w: 1, h: 1 },
-            { type: 'chair', col: 3, row: 2, w: 1, h: 1 },
-            { type: 'chair', col: 11, row: 6, w: 1, h: 1 },
-            { type: 'couch', col: 5, row: 10, w: 3, h: 1 },
-            { type: 'wall', col: 7, row: 0, w: 1, h: 1 },
-            { type: 'wall', col: 7, row: 1, w: 1, h: 1 },
-            { type: 'wall', col: 7, row: 2, w: 1, h: 1 },
-            { type: 'wall', col: 7, row: 3, w: 1, h: 1 },
-            { type: 'wall', col: 7, row: 4, w: 1, h: 1 },
-            { type: 'wall', col: 7, row: 6, w: 1, h: 1 },
-            { type: 'wall', col: 7, row: 7, w: 1, h: 1 },
-            { type: 'plant', col: 0, row: 0, w: 1, h: 1 },
-            { type: 'plant', col: 14, row: 11, w: 1, h: 1 },
-            { type: 'plant', col: 0, row: 11, w: 1, h: 1 },
-            { type: 'petbed', col: 9, row: 2, w: 2, h: 1 },
-            { type: 'wall', col: 4, row: 5, w: 1, h: 1 },
-            { type: 'wall', col: 4, row: 6, w: 1, h: 1 },
-            { type: 'wall', col: 4, row: 7, w: 1, h: 1 },
-            { type: 'wall', col: 4, row: 8, w: 1, h: 1 },
-            { type: 'chair', col: 10, row: 10, w: 1, h: 1 },
-        ],
-    },
-    {
-        name: 'Warehouse',
-        batteryCost: 2,
-        charger: { col: 0, row: 0 },
-        obstacles: [
-            { type: 'wall', col: 2, row: 2, w: 1, h: 1 },
-            { type: 'wall', col: 3, row: 2, w: 1, h: 1 },
-            { type: 'wall', col: 4, row: 2, w: 1, h: 1 },
-            { type: 'wall', col: 5, row: 2, w: 1, h: 1 },
-            { type: 'wall', col: 6, row: 2, w: 1, h: 1 },
-            { type: 'wall', col: 8, row: 2, w: 1, h: 1 },
-            { type: 'wall', col: 9, row: 2, w: 1, h: 1 },
-            { type: 'wall', col: 10, row: 2, w: 1, h: 1 },
-            { type: 'wall', col: 11, row: 2, w: 1, h: 1 },
-            { type: 'wall', col: 12, row: 2, w: 1, h: 1 },
-            { type: 'wall', col: 2, row: 5, w: 1, h: 1 },
-            { type: 'wall', col: 3, row: 5, w: 1, h: 1 },
-            { type: 'wall', col: 4, row: 5, w: 1, h: 1 },
-            { type: 'wall', col: 6, row: 5, w: 1, h: 1 },
-            { type: 'wall', col: 7, row: 5, w: 1, h: 1 },
-            { type: 'wall', col: 8, row: 5, w: 1, h: 1 },
-            { type: 'wall', col: 9, row: 5, w: 1, h: 1 },
-            { type: 'wall', col: 11, row: 5, w: 1, h: 1 },
-            { type: 'wall', col: 12, row: 5, w: 1, h: 1 },
-            { type: 'wall', col: 1, row: 8, w: 1, h: 1 },
-            { type: 'wall', col: 2, row: 8, w: 1, h: 1 },
-            { type: 'wall', col: 3, row: 8, w: 1, h: 1 },
-            { type: 'wall', col: 4, row: 8, w: 1, h: 1 },
-            { type: 'wall', col: 5, row: 8, w: 1, h: 1 },
-            { type: 'wall', col: 7, row: 8, w: 1, h: 1 },
-            { type: 'wall', col: 8, row: 8, w: 1, h: 1 },
-            { type: 'wall', col: 9, row: 8, w: 1, h: 1 },
-            { type: 'wall', col: 10, row: 8, w: 1, h: 1 },
-            { type: 'wall', col: 12, row: 8, w: 1, h: 1 },
-            { type: 'wall', col: 13, row: 8, w: 1, h: 1 },
-            { type: 'wall', col: 14, row: 4, w: 1, h: 1 },
-            { type: 'wall', col: 14, row: 5, w: 1, h: 1 },
-            { type: 'wall', col: 0, row: 5, w: 1, h: 1 },
-            { type: 'wall', col: 0, row: 6, w: 1, h: 1 },
-            { type: 'table', col: 10, row: 3, w: 2, h: 2 },
-            { type: 'chair', col: 3, row: 3, w: 1, h: 1 },
-            { type: 'chair', col: 6, row: 6, w: 1, h: 1 },
-            { type: 'plant', col: 14, row: 11, w: 1, h: 1 },
-            { type: 'plant', col: 0, row: 10, w: 1, h: 1 },
-            { type: 'couch', col: 3, row: 10, w: 3, h: 1 },
-            { type: 'petbed', col: 10, row: 10, w: 2, h: 1 },
-        ],
-    },
-    {
-        name: 'The Gauntlet',
-        batteryCost: 3,
-        charger: { col: 7, row: 6 },
-        obstacles: [
-            { type: 'wall', col: 1, row: 1, w: 1, h: 1 },
-            { type: 'wall', col: 2, row: 1, w: 1, h: 1 },
-            { type: 'wall', col: 3, row: 1, w: 1, h: 1 },
-            { type: 'wall', col: 4, row: 1, w: 1, h: 1 },
-            { type: 'wall', col: 5, row: 1, w: 1, h: 1 },
-            { type: 'wall', col: 7, row: 1, w: 1, h: 1 },
-            { type: 'wall', col: 8, row: 1, w: 1, h: 1 },
-            { type: 'wall', col: 10, row: 1, w: 1, h: 1 },
-            { type: 'wall', col: 11, row: 1, w: 1, h: 1 },
-            { type: 'wall', col: 12, row: 1, w: 1, h: 1 },
-            { type: 'wall', col: 13, row: 1, w: 1, h: 1 },
-            { type: 'wall', col: 1, row: 2, w: 1, h: 1 },
-            { type: 'wall', col: 1, row: 3, w: 1, h: 1 },
-            { type: 'wall', col: 1, row: 5, w: 1, h: 1 },
-            { type: 'wall', col: 1, row: 6, w: 1, h: 1 },
-            { type: 'wall', col: 1, row: 7, w: 1, h: 1 },
-            { type: 'wall', col: 1, row: 9, w: 1, h: 1 },
-            { type: 'wall', col: 1, row: 10, w: 1, h: 1 },
-            { type: 'wall', col: 13, row: 2, w: 1, h: 1 },
-            { type: 'wall', col: 13, row: 3, w: 1, h: 1 },
-            { type: 'wall', col: 13, row: 4, w: 1, h: 1 },
-            { type: 'wall', col: 13, row: 6, w: 1, h: 1 },
-            { type: 'wall', col: 13, row: 7, w: 1, h: 1 },
-            { type: 'wall', col: 13, row: 8, w: 1, h: 1 },
-            { type: 'wall', col: 13, row: 10, w: 1, h: 1 },
-            { type: 'wall', col: 2, row: 10, w: 1, h: 1 },
-            { type: 'wall', col: 3, row: 10, w: 1, h: 1 },
-            { type: 'wall', col: 5, row: 10, w: 1, h: 1 },
-            { type: 'wall', col: 6, row: 10, w: 1, h: 1 },
-            { type: 'wall', col: 7, row: 10, w: 1, h: 1 },
-            { type: 'wall', col: 8, row: 10, w: 1, h: 1 },
-            { type: 'wall', col: 10, row: 10, w: 1, h: 1 },
-            { type: 'wall', col: 11, row: 10, w: 1, h: 1 },
-            { type: 'wall', col: 12, row: 10, w: 1, h: 1 },
-            { type: 'wall', col: 4, row: 3, w: 1, h: 1 },
-            { type: 'wall', col: 5, row: 3, w: 1, h: 1 },
-            { type: 'wall', col: 5, row: 4, w: 1, h: 1 },
-            { type: 'wall', col: 5, row: 5, w: 1, h: 1 },
-            { type: 'wall', col: 9, row: 3, w: 1, h: 1 },
-            { type: 'wall', col: 10, row: 3, w: 1, h: 1 },
-            { type: 'wall', col: 9, row: 4, w: 1, h: 1 },
-            { type: 'wall', col: 9, row: 5, w: 1, h: 1 },
-            { type: 'wall', col: 4, row: 7, w: 1, h: 1 },
-            { type: 'wall', col: 5, row: 7, w: 1, h: 1 },
-            { type: 'wall', col: 5, row: 8, w: 1, h: 1 },
-            { type: 'wall', col: 9, row: 7, w: 1, h: 1 },
-            { type: 'wall', col: 10, row: 7, w: 1, h: 1 },
-            { type: 'wall', col: 9, row: 8, w: 1, h: 1 },
-            { type: 'table', col: 2, row: 3, w: 2, h: 2 },
-            { type: 'table', col: 11, row: 3, w: 2, h: 2 },
-            { type: 'chair', col: 7, row: 3, w: 1, h: 1 },
-            { type: 'chair', col: 7, row: 9, w: 1, h: 1 },
-            { type: 'plant', col: 3, row: 6, w: 1, h: 1 },
-            { type: 'plant', col: 11, row: 6, w: 1, h: 1 },
-        ],
-    },
-];
-
-// === PAR SOLVER ===
-
-// BFS from a single source to all reachable tiles, returns distance grid
-function bfsFromSource(g, srcCol, srcRow) {
-    const dist = Array.from({ length: ROWS }, () => new Int16Array(COLS).fill(-1));
-    dist[srcRow][srcCol] = 0;
-    const queue = [[srcCol, srcRow]];
-    const dirs = [[0, -1], [0, 1], [-1, 0], [1, 0]];
-    let qi = 0;
-    while (qi < queue.length) {
-        const [cx, cy] = queue[qi++];
-        const d = dist[cy][cx];
-        for (const [dx, dy] of dirs) {
-            const nx = cx + dx, ny = cy + dy;
-            if (nx < 0 || nx >= COLS || ny < 0 || ny >= ROWS) continue;
-            if (dist[ny][nx] !== -1) continue;
-            if (g[ny][nx] === OBSTACLE) continue;
-            dist[ny][nx] = d + 1;
-            queue.push([nx, ny]);
-        }
-    }
-    return dist;
-}
-
-// BFS path reconstruction: returns array of {col, row} from src to dst (inclusive of dst, exclusive of src)
-function bfsPath(g, fromCol, fromRow, toCol, toRow) {
-    if (fromCol === toCol && fromRow === toRow) return [];
-    const prev = Array.from({ length: ROWS }, () => new Array(COLS).fill(null));
-    const visited = Array.from({ length: ROWS }, () => new Uint8Array(COLS));
-    const queue = [[fromCol, fromRow]];
-    visited[fromRow][fromCol] = 1;
-    const dirs = [[0, -1], [0, 1], [-1, 0], [1, 0]];
-    let qi = 0;
-    let found = false;
-    while (qi < queue.length && !found) {
-        const [cx, cy] = queue[qi++];
-        for (const [dx, dy] of dirs) {
-            const nx = cx + dx, ny = cy + dy;
-            if (nx < 0 || nx >= COLS || ny < 0 || ny >= ROWS) continue;
-            if (visited[ny][nx]) continue;
-            if (g[ny][nx] === OBSTACLE) continue;
-            visited[ny][nx] = 1;
-            prev[ny][nx] = [cx, cy];
-            if (nx === toCol && ny === toRow) { found = true; break; }
-            queue.push([nx, ny]);
-        }
-    }
-    if (!found) return null;
-    // Reconstruct
-    const path = [];
-    let cx = toCol, cy = toRow;
-    while (!(cx === fromCol && cy === fromRow)) {
-        path.push({ col: cx, row: cy });
-        const p = prev[cy][cx];
-        cx = p[0]; cy = p[1];
-    }
-    path.reverse();
-    return path;
-}
-
-// Build the grid for a level (used by solver)
-function buildLevelGrid(levelIndex) {
-    const level = LEVELS[levelIndex];
-    const g = [];
-    for (let r = 0; r < ROWS; r++) {
-        g[r] = [];
-        for (let c = 0; c < COLS; c++) {
-            g[r][c] = DIRTY;
-        }
-    }
-    for (const obs of level.obstacles) {
-        for (let dr = 0; dr < obs.h; dr++) {
-            for (let dc = 0; dc < obs.w; dc++) {
-                g[obs.row + dr][obs.col + dc] = OBSTACLE;
-            }
-        }
-    }
-    g[level.charger.row][level.charger.col] = CHARGER;
-    return g;
-}
-
-// Find the farthest walkable corner from the charger for NPC start
-function findNpcStartCorner(g, chargerCol, chargerRow) {
-    const corners = [
-        { col: 0, row: 0 },
-        { col: COLS - 1, row: 0 },
-        { col: 0, row: ROWS - 1 },
-        { col: COLS - 1, row: ROWS - 1 },
-    ];
-    const chargerDist = bfsFromSource(g, chargerCol, chargerRow);
-    let best = null;
-    let bestDist = -1;
-    for (const corner of corners) {
-        // Skip corners occupied by obstacles
-        if (g[corner.row][corner.col] === OBSTACLE) continue;
-        const d = chargerDist[corner.row][corner.col];
-        if (d > bestDist) {
-            bestDist = d;
-            best = corner;
-        }
-    }
-    // Fallback: if no corner is reachable, just use charger position
-    return best || { col: chargerCol, row: chargerRow };
-}
-
-// Compute par moves AND full path for a level using greedy nearest-neighbor with battery
-function computeParRoute(levelIndex) {
-    const level = LEVELS[levelIndex];
-    const batteryCost = level.batteryCost || 1;
-    const maxBattery = 100;
-    const g = buildLevelGrid(levelIndex);
-
-    const chargerDist = bfsFromSource(g, level.charger.col, level.charger.row);
-
-    // Collect dirty tiles
-    const dirtyTiles = [];
-    for (let r = 0; r < ROWS; r++) {
-        for (let c = 0; c < COLS; c++) {
-            if (g[r][c] === DIRTY) dirtyTiles.push({ col: c, row: r });
-        }
-    }
-
-    // NPC starts from farthest corner and walks to charger first
-    const npcStart = findNpcStartCorner(g, level.charger.col, level.charger.row);
-    const approachPath = bfsPath(g, npcStart.col, npcStart.row, level.charger.col, level.charger.row) || [];
-
-    let curCol = level.charger.col;
-    let curRow = level.charger.row;
-    let battery = maxBattery;
-    let totalMoves = 0;
-    const uncleaned = new Set(dirtyTiles.map((_, i) => i));
-    const fullPath = [{ col: npcStart.col, row: npcStart.row }]; // start at far corner
-
-    // Prepend approach path (corner → charger) — NPC does NOT clean during approach
-    for (const step of approachPath) {
-        fullPath.push(step);
-    }
-    const approachLength = approachPath.length + 1; // includes starting position
-
-    while (uncleaned.size > 0) {
-        const distFromCur = bfsFromSource(g, curCol, curRow);
-
-        let bestIdx = -1;
-        let bestDist = Infinity;
-
-        for (const idx of uncleaned) {
-            const t = dirtyTiles[idx];
-            const distToTile = distFromCur[t.row][t.col];
-            if (distToTile < 0) continue;
-
-            const distTileToCharger = chargerDist[t.row][t.col];
-            const totalCost = (distToTile + distTileToCharger) * batteryCost;
-
-            if (totalCost <= battery && distToTile < bestDist) {
-                bestDist = distToTile;
-                bestIdx = idx;
-            }
-        }
-
-        if (bestIdx === -1) {
-            // Return to charger
-            const pathToCharger = bfsPath(g, curCol, curRow, level.charger.col, level.charger.row);
-            if (!pathToCharger) break;
-            for (const step of pathToCharger) fullPath.push(step);
-            totalMoves += pathToCharger.length;
-            curCol = level.charger.col;
-            curRow = level.charger.row;
-            battery = maxBattery;
-            continue;
-        }
-
-        // Move to nearest tile via BFS path
-        const t = dirtyTiles[bestIdx];
-        const pathToTile = bfsPath(g, curCol, curRow, t.col, t.row);
-        if (!pathToTile) break;
-        for (const step of pathToTile) {
-            fullPath.push(step);
-            // Mark tiles cleaned along the way
-            const stepIdx = dirtyTiles.findIndex(d => d.col === step.col && d.row === step.row);
-            if (stepIdx >= 0) uncleaned.delete(stepIdx);
-        }
-        totalMoves += pathToTile.length;
-        battery -= pathToTile.length * batteryCost;
-        curCol = t.col;
-        curRow = t.row;
-    }
-
-    return { totalMoves, fullPath, approachLength };
-}
+// === GAME ===
+// Classic script sharing globals: state, level setup, movement rules, input, saved progress,
+// level select and the frame loop. Loaded last (see index.html).
 
 // === GAME STATE ===
 let canvas, ctx;
+let canvasDpr = 1; // device pixel ratio the canvas backing store is scaled by
 let grid = [];
 let roomba = { col: 0, row: 0, dir: 'right', battery: 100, drawX: 0, drawY: 0 };
 let currentLevel = 0;
@@ -432,21 +21,26 @@ let chargerPulse = 0;
 let cleanAnimations = [];
 let roombaWheelAngle = 0; // for spinning wheels
 let tileCleanFade = {}; // tracks fade-in progress for recently cleaned tiles
+let levelStartScore = 0; // score when the level began; restored on restart so tiles can't pay twice
+let levelResult = null;  // summary shown on the Level Complete overlay
+let lastFrameTime = 0;
+let dtMs = FRAME_MS;     // elapsed ms since the previous frame (clamped)
+let dtFrames = 1;        // the same, in units of 60 fps frames
+let bannerText = '';
+let bannerTimer = 0;     // ms left to show the level banner
+let helpVisible = false;
+let chargerDistGrid = null; // BFS distance from every tile back to the dock, for the "dock N moves" hint
+let viewFade = 0;        // >0 while fading in after a 2D/3D switch
+
+// Saved progress (localStorage): highest level reached and the best result per level
+const SAVE_KEY = 'ben-vacuum-game.progress.v1';
+let progress = { unlocked: 0, best: {}, bestScore: 0 };
 
 // === FIRST-PERSON MODE ===
 let viewMode = 'TD'; // 'TD' = top-down, 'FP' = first-person
 let fpAngle = -Math.PI / 2; // camera facing angle (starts north/up)
 let fpTargetAngle = -Math.PI / 2;
 let obstacleTypeMap = []; // 2D array: obstacleTypeMap[row][col] = type string or null
-const FP_FOV = Math.PI / 3; // 60 degree field of view
-const FP_HEIGHT_FACTORS = {
-    wall: 1.0,
-    couch: 0.55,
-    table: 0.5,
-    chair: 0.65,
-    plant: 0.9,
-    petbed: 0.25,
-};
 
 // NPC replay state
 let npcReplay = {
@@ -470,7 +64,8 @@ let holdInterval = null;
 let keysDown = new Set();
 
 // DOM elements
-let elCleaned, elMoves, elScore, elBatteryFill, elBatteryText, elLevelNum, elBtnRestart, elParCount, elBtnView;
+let elCleaned, elMoves, elScore, elBatteryFill, elBatteryText, elLevelNum, elBtnRestart, elParCount, elBtnView, elBtnHelp,
+    elDockDist, elSrStatus;
 
 // === INITIALIZATION ===
 function initLevel(levelIndex) {
@@ -507,6 +102,9 @@ function initLevel(levelIndex) {
     roomba.battery = 100;
     roomba.drawX = level.charger.col * TILE + TILE / 2;
     roomba.drawY = level.charger.row * TILE + TILE / 2;
+    // Keep the first-person camera in step with the Roomba's facing
+    fpTargetAngle = FP_ANGLE_MAP[roomba.dir];
+    fpAngle = fpTargetAngle;
 
     totalDirty = 0;
     for (let r = 0; r < ROWS; r++) {
@@ -517,10 +115,14 @@ function initLevel(levelIndex) {
 
     cleaned = 0;
     moves = 0;
+    score = levelStartScore;
+    levelResult = null;
     gameState = 'PLAYING';
     bumpFlash = 0;
     cleanAnimations = [];
     tileCleanFade = {};
+    bannerText = level.name;
+    bannerTimer = BANNER_MS;
     stopHold();
 
     const parResult = computeParRoute(levelIndex);
@@ -529,117 +131,112 @@ function initLevel(levelIndex) {
     parApproachLen = parResult.approachLength;
     npcReplay.active = false;
 
+    // Obstacles never move, so the way home from every tile can be computed once
+    chargerDistGrid = bfsFromSource(grid, level.charger.col, level.charger.row);
+
+    buildLevelSelect();
     updateUI();
+}
+
+// --- Saved progress ---------------------------------------------------------
+
+function loadProgress() {
+    try {
+        const raw = localStorage.getItem(SAVE_KEY);
+        if (!raw) return;
+        const s = JSON.parse(raw);
+        if (s && typeof s === 'object') {
+            progress.unlocked = Math.min(LEVELS.length - 1, Math.max(0, s.unlocked | 0));
+            progress.best = s.best && typeof s.best === 'object' ? s.best : {};
+            progress.bestScore = s.bestScore | 0;
+        }
+    } catch (e) {
+        // Storage blocked or corrupt: play without saving
+    }
+}
+
+function saveProgress() {
+    try {
+        localStorage.setItem(SAVE_KEY, JSON.stringify(progress));
+    } catch (e) {
+        // Storage blocked: nothing to do
+    }
+}
+
+function recordLevelResult(levelIndex, result) {
+    const prev = progress.best[levelIndex];
+    progress.best[levelIndex] = {
+        moves: prev ? Math.min(prev.moves, result.moves) : result.moves,
+        stars: prev ? Math.max(prev.stars, result.stars) : result.stars,
+    };
+    progress.unlocked = Math.max(progress.unlocked, Math.min(levelIndex + 1, LEVELS.length - 1));
+    progress.bestScore = Math.max(progress.bestScore, score);
+    saveProgress();
+}
+
+// --- Level select ------------------------------------------------------------
+
+function buildLevelSelect() {
+    const el = document.getElementById('levelSelect');
+    if (!el) return;
+    el.innerHTML = '';
+    const label = document.createElement('span');
+    label.className = 'level-label';
+    label.textContent = 'Levels';
+    el.appendChild(label);
+    LEVELS.forEach((lv, i) => {
+        const b = document.createElement('button');
+        b.className = 'level-btn' + (i === currentLevel ? ' current' : '');
+        b.textContent = String(i + 1);
+        const best = progress.best[i];
+        b.title = best ? `${lv.name} · best ${best.moves} moves` : lv.name;
+        b.setAttribute('aria-label', `Level ${i + 1}: ${lv.name}${best ? `, best ${best.moves} moves` : ''}`);
+        b.disabled = i > progress.unlocked;
+        if (best) {
+            const s = document.createElement('span');
+            s.className = 'level-stars';
+            s.textContent = '★'.repeat(best.stars);
+            b.appendChild(s);
+        }
+        b.addEventListener('click', () => {
+            selectLevel(i);
+            b.blur();
+        });
+        el.appendChild(b);
+    });
+}
+
+function selectLevel(i) {
+    if (i < 0 || i >= LEVELS.length || i > progress.unlocked) return;
+    if (i !== currentLevel) levelStartScore = 0; // jumping to another level starts a fresh run
+    currentLevel = i;
+    npcReplay.active = false;
+    helpVisible = false;
+    initLevel(i);
 }
 
 // === INPUT HANDLING ===
 // In FP mode, remap controls: up=forward, down=back, left/right=rotate
-const FP_TURN_STEP = Math.PI / 2; // 90 degree turns
-const FP_DIR_ORDER = ['up', 'right', 'down', 'left']; // clockwise
-const FP_ANGLE_MAP = { up: -Math.PI / 2, right: 0, down: Math.PI / 2, left: Math.PI };
 
-function handleFpDirection(dir) {
-    if (gameState !== 'PLAYING') return;
+// The one movement rule, shared by both views. Returns true if the Roomba moved.
+function tryMove(dc, dr) {
+    const newCol = roomba.col + dc;
+    const newRow = roomba.row + dr;
 
-    if (dir === 'left' || dir === 'right') {
-        // Rotate: find current facing index and turn
-        let idx = FP_DIR_ORDER.indexOf(roomba.dir);
-        if (idx < 0) idx = 0;
-        idx = (idx + (dir === 'right' ? 1 : -1) + 4) % 4;
-        roomba.dir = FP_DIR_ORDER[idx];
-        fpTargetAngle = FP_ANGLE_MAP[roomba.dir];
-        return; // rotation only, no movement
-    }
-
-    // Forward (up) or backward (down) relative to current facing
-    const deltas = { up: { dc: 0, dr: -1 }, down: { dc: 0, dr: 1 }, left: { dc: -1, dr: 0 }, right: { dc: 1, dr: 0 } };
-    if (dir === 'up') {
-        // Move in the direction we're facing — call grid movement directly
-        const fwd = roomba.dir;
-        viewMode = 'TD'; // temporarily disable FP remap
-        handleDirection(fwd);
-        viewMode = 'FP';
-        return;
-    } else if (dir === 'down') {
-        // Move opposite to facing direction
-        const opposite = { up: 'down', down: 'up', left: 'right', right: 'left' };
-        const backDir = opposite[roomba.dir];
-        // Move backward but keep facing the same direction
-        const d = deltas[backDir];
-        const newCol = roomba.col + d.dc;
-        const newRow = roomba.row + d.dr;
-        if (newCol < 0 || newCol >= COLS || newRow < 0 || newRow >= ROWS) { bumpFlash = 10; return; }
-        if (grid[newRow][newCol] === OBSTACLE) { bumpFlash = 10; return; }
-        roomba.col = newCol;
-        roomba.row = newRow;
-        moves++;
-        roombaWheelAngle += 0.5;
-        const cost = LEVELS[currentLevel].batteryCost || 1;
-        roomba.battery = Math.max(0, roomba.battery - cost);
-        if (grid[newRow][newCol] === DIRTY) {
-            grid[newRow][newCol] = CLEAN;
-            cleaned++;
-            score += 10;
-            cleanAnimations.push({ col: newCol, row: newRow, progress: 0 });
-            tileCleanFade[`${newCol},${newRow}`] = 0;
-        }
-        if (grid[newRow][newCol] === CHARGER) roomba.battery = 100;
-        if (cleaned >= totalDirty) {
-            const bonus = Math.max(0, (totalDirty * 2 - moves)) * 5;
-            score += bonus;
-            gameState = 'LEVEL_COMPLETE';
-            stopHold();
-        }
-        if (roomba.battery <= 0 && gameState === 'PLAYING') {
-            gameState = 'GAME_OVER';
-            stopHold();
-        }
-        updateUI();
-    }
-}
-
-function handleDirection(dir) {
-    if (gameState !== 'PLAYING') return;
-
-    // In FP mode, remap to relative controls
-    if (viewMode === 'FP') {
-        handleFpDirection(dir);
-        return;
-    }
-
-    const deltas = {
-        up:    { dc: 0, dr: -1 },
-        down:  { dc: 0, dr: 1 },
-        left:  { dc: -1, dr: 0 },
-        right: { dc: 1, dr: 0 },
-    };
-
-    const d = deltas[dir];
-    if (!d) return;
-
-    roomba.dir = dir;
-    roombaWheelAngle += 0.5;
-    // Update FP camera target angle
-    const dirAnglesMap = { up: -Math.PI / 2, down: Math.PI / 2, left: Math.PI, right: 0 };
-    fpTargetAngle = dirAnglesMap[dir];
-    const newCol = roomba.col + d.dc;
-    const newRow = roomba.row + d.dr;
-
-    if (newCol < 0 || newCol >= COLS || newRow < 0 || newRow >= ROWS) {
+    if (newCol < 0 || newCol >= COLS || newRow < 0 || newRow >= ROWS || grid[newRow][newCol] === OBSTACLE) {
         bumpFlash = 10;
-        return;
-    }
-
-    if (grid[newRow][newCol] === OBSTACLE) {
-        bumpFlash = 10;
-        return;
+        sound('bump');
+        return false;
     }
 
     roomba.col = newCol;
     roomba.row = newRow;
     moves++;
+    roombaWheelAngle += 0.5;
+    noteMove();
 
     const cost = LEVELS[currentLevel].batteryCost || 1;
+    const batteryBefore = roomba.battery;
     roomba.battery = Math.max(0, roomba.battery - cost);
 
     if (grid[newRow][newCol] === DIRTY) {
@@ -648,25 +245,81 @@ function handleDirection(dir) {
         score += 10;
         cleanAnimations.push({ col: newCol, row: newRow, progress: 0 });
         tileCleanFade[`${newCol},${newRow}`] = 0; // start fade-in
+        sound('clean');
     }
 
     if (grid[newRow][newCol] === CHARGER) {
+        if (roomba.battery < 100) sound('dock');
         roomba.battery = 100;
+    } else if (batteryBefore > 20 && roomba.battery <= 20) {
+        sound('lowBattery');
     }
 
     if (cleaned >= totalDirty) {
-        const bonus = Math.max(0, (totalDirty * 2 - moves)) * 5;
-        score += bonus;
-        gameState = 'LEVEL_COMPLETE';
-        stopHold();
-    }
-
-    if (roomba.battery <= 0 && gameState === 'PLAYING') {
+        completeLevel();
+    } else if (roomba.battery <= 0) {
         gameState = 'GAME_OVER';
         stopHold();
+        sound('gameOver');
     }
 
     updateUI();
+    return true;
+}
+
+// Sound hooks; harmless when audio.js is not loaded (tests)
+function sound(name) {
+    if (typeof sfx !== 'undefined' && sfx[name]) sfx[name]();
+}
+
+function noteMove() {
+    if (typeof audio !== 'undefined' && typeof performance !== 'undefined') audio.lastMoveAt = performance.now();
+}
+
+// Level finished. The bonus is tied to par so the target on screen and the scoring agree.
+function completeLevel() {
+    const underPar = Math.max(0, parMoves - moves);
+    const bonus = 200 + underPar * 10;
+    const stars = moves <= parMoves ? 3 : moves <= parMoves * 1.25 ? 2 : 1;
+    score += bonus;
+    levelResult = { moves, par: parMoves, bonus, stars, tileScore: cleaned * 10 };
+    gameState = 'LEVEL_COMPLETE';
+    stopHold();
+    sound('levelComplete');
+    recordLevelResult(currentLevel, levelResult);
+    buildLevelSelect();
+}
+
+// First person: left/right turn 90 degrees in place, up/down drive forward/back relative to facing.
+function handleFpDirection(dir) {
+    if (dir === 'left' || dir === 'right') {
+        let idx = FP_DIR_ORDER.indexOf(roomba.dir);
+        if (idx < 0) idx = 0;
+        idx = (idx + (dir === 'right' ? 1 : -1) + 4) % 4;
+        roomba.dir = FP_DIR_ORDER[idx];
+        fpTargetAngle = FP_ANGLE_MAP[roomba.dir];
+        sound('turn');
+        return;
+    }
+    const moveDir = dir === 'up' ? roomba.dir : OPPOSITE_DIR[roomba.dir];
+    const d = DIR_DELTAS[moveDir];
+    tryMove(d.dc, d.dr);
+}
+
+function handleDirection(dir) {
+    if (gameState !== 'PLAYING' || helpVisible) return;
+
+    if (viewMode === 'FP') {
+        handleFpDirection(dir);
+        return;
+    }
+
+    const d = DIR_DELTAS[dir];
+    if (!d) return;
+
+    roomba.dir = dir;
+    fpTargetAngle = FP_ANGLE_MAP[dir];
+    tryMove(d.dc, d.dr);
 }
 
 // === PRESS AND HOLD ===
@@ -675,13 +328,16 @@ function startHold(dir) {
     stopHold();
     heldDir = dir;
     handleDirection(dir);
+    // Turning in 3D is one step per press. Auto-repeating it spins the camera.
+    if (viewMode === 'FP' && (dir === 'left' || dir === 'right')) return;
+    const interval = viewMode === 'FP' ? FP_MOVE_INTERVAL : MOVE_INTERVAL;
     holdInterval = setInterval(() => {
         if (heldDir === dir) {
             handleDirection(dir);
         } else {
             stopHold();
         }
-    }, MOVE_INTERVAL);
+    }, interval);
 }
 
 function stopHold() {
@@ -692,6 +348,55 @@ function stopHold() {
     }
 }
 
+// Works while playing and during the ghost replay
+function toggleView() {
+    if (gameState !== 'PLAYING' && gameState !== 'PAR_REPLAY') return;
+    viewMode = viewMode === 'TD' ? 'FP' : 'TD';
+    if (gameState === 'PLAYING') {
+        // Snap the camera to the Roomba's real facing so the two views never disagree
+        fpTargetAngle = FP_ANGLE_MAP[roomba.dir];
+        fpAngle = fpTargetAngle;
+    }
+    viewFade = 1;
+    stopHold();
+    updateViewButtons();
+}
+
+// The d-pad means something different in 3D (turn / drive), so say so on the buttons
+function updateViewButtons() {
+    const fp = viewMode === 'FP';
+    if (elBtnView) elBtnView.textContent = fp ? '2D View' : '3D View';
+    const btnLeft = document.getElementById('btnLeft');
+    const btnRight = document.getElementById('btnRight');
+    const btnUp = document.getElementById('btnUp');
+    const btnDown = document.getElementById('btnDown');
+    if (btnLeft) {
+        btnLeft.textContent = fp ? '↶' : '◀';
+        btnLeft.setAttribute('aria-label', fp ? 'Turn left' : 'Left');
+    }
+    if (btnRight) {
+        btnRight.textContent = fp ? '↷' : '▶';
+        btnRight.setAttribute('aria-label', fp ? 'Turn right' : 'Right');
+    }
+    if (btnUp) btnUp.setAttribute('aria-label', fp ? 'Forward' : 'Up');
+    if (btnDown) btnDown.setAttribute('aria-label', fp ? 'Reverse' : 'Down');
+}
+
+// Restart keeps the current view. After the final level it starts the game over.
+function restartLevel() {
+    if (gameState === 'LEVEL_COMPLETE' && currentLevel === LEVELS.length - 1) {
+        currentLevel = 0;
+        levelStartScore = 0;
+    }
+    npcReplay.active = false;
+    initLevel(currentLevel);
+}
+
+function toggleHelp() {
+    helpVisible = !helpVisible;
+    stopHold();
+}
+
 // Keyboard
 const keyMap = {
     ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right',
@@ -700,6 +405,17 @@ const keyMap = {
 };
 
 document.addEventListener('keydown', (e) => {
+    // H or ? toggles the help screen; Escape closes it; nothing else gets through while it is up
+    if (e.key === 'h' || e.key === 'H' || e.key === '?') {
+        e.preventDefault();
+        toggleHelp();
+        return;
+    }
+    if (helpVisible) {
+        if (e.key === 'Escape') toggleHelp();
+        return;
+    }
+
     // W key: watch par route when level complete, otherwise move up
     if ((e.key === 'w' || e.key === 'W') && gameState === 'LEVEL_COMPLETE') {
         e.preventDefault();
@@ -723,18 +439,19 @@ document.addEventListener('keydown', (e) => {
 
     // V: toggle first-person view
     if (e.key === 'v' || e.key === 'V') {
-        if (gameState === 'PLAYING') {
-            viewMode = viewMode === 'TD' ? 'FP' : 'TD';
-            if (elBtnView) elBtnView.textContent = viewMode === 'FP' ? '2D View' : '3D View';
-        }
+        toggleView();
         return;
     }
 
-    // R: restart (also exits replay)
+    // M: mute / unmute
+    if (e.key === 'm' || e.key === 'M') {
+        if (typeof audioToggleMute === 'function') audioToggleMute();
+        return;
+    }
+
+    // R: restart the level in the current view (also exits replay)
     if (e.key === 'r' || e.key === 'R') {
-        viewMode = 'TD';
-        if (elBtnView) elBtnView.textContent = '3D View';
-        initLevel(currentLevel);
+        restartLevel();
         return;
     }
 
@@ -766,1261 +483,11 @@ document.addEventListener('keyup', (e) => {
     }
 });
 
-// === RENDERING ===
-
-// Floor texture pattern (generated once)
-let floorPattern = null;
-let cleanPattern = null;
-function createFloorPatterns() {
-    // Dirty floor - realistic hardwood plank texture
-    const fc = document.createElement('canvas');
-    fc.width = TILE; fc.height = TILE;
-    const fctx = fc.getContext('2d');
-    // Base warm wood tone
-    const woodBase = fctx.createLinearGradient(0, 0, TILE, 0);
-    woodBase.addColorStop(0, '#D4BC96');
-    woodBase.addColorStop(0.3, '#E0CBA4');
-    woodBase.addColorStop(0.7, '#D8C49A');
-    woodBase.addColorStop(1, '#CCAE88');
-    fctx.fillStyle = woodBase;
-    fctx.fillRect(0, 0, TILE, TILE);
-    // Plank seam at bottom
-    fctx.strokeStyle = 'rgba(140, 115, 80, 0.35)';
-    fctx.lineWidth = 1;
-    fctx.beginPath();
-    fctx.moveTo(0, TILE - 0.5);
-    fctx.lineTo(TILE, TILE - 0.5);
-    fctx.stroke();
-    // Wood grain - multiple organic lines
-    for (let i = 0; i < 10; i++) {
-        const y = 2 + i * 4.5 + (Math.sin(i * 1.7) * 1.5);
-        const alpha = 0.08 + Math.random() * 0.12;
-        fctx.strokeStyle = `rgba(140, 110, 70, ${alpha})`;
-        fctx.lineWidth = 0.4 + Math.random() * 0.6;
-        fctx.beginPath();
-        fctx.moveTo(0, y);
-        fctx.bezierCurveTo(TILE * 0.25, y + Math.sin(i) * 1.2, TILE * 0.75, y - Math.cos(i) * 0.8, TILE, y + Math.sin(i * 0.5) * 1);
-        fctx.stroke();
-    }
-    // Knot mark (subtle)
-    fctx.fillStyle = 'rgba(160, 130, 85, 0.12)';
-    fctx.beginPath();
-    fctx.ellipse(32, 20, 4, 2.5, 0.3, 0, Math.PI * 2);
-    fctx.fill();
-    // Dust particles
-    const dustSeeds = [[8,12],[22,35],[38,8],[14,40],[42,28],[6,22],[30,18],[44,40]];
-    for (const [dx, dy] of dustSeeds) {
-        fctx.fillStyle = `rgba(155, 135, 105, ${0.25 + Math.random() * 0.2})`;
-        fctx.beginPath();
-        fctx.arc(dx, dy, 0.4 + Math.random() * 0.8, 0, Math.PI * 2);
-        fctx.fill();
-    }
-    // Subtle vignette/wear
-    const vign = fctx.createRadialGradient(TILE/2, TILE/2, 0, TILE/2, TILE/2, TILE * 0.7);
-    vign.addColorStop(0, 'rgba(0,0,0,0)');
-    vign.addColorStop(1, 'rgba(0,0,0,0.04)');
-    fctx.fillStyle = vign;
-    fctx.fillRect(0, 0, TILE, TILE);
-    floorPattern = ctx.createPattern(fc, 'repeat');
-
-    // Clean floor - polished gleaming surface
-    const cc = document.createElement('canvas');
-    cc.width = TILE; cc.height = TILE;
-    const cctx = cc.getContext('2d');
-    // Base clean color with subtle gradient
-    const cleanBase = cctx.createLinearGradient(0, 0, TILE, TILE);
-    cleanBase.addColorStop(0, '#A8DEB8');
-    cleanBase.addColorStop(0.5, '#BBE8C8');
-    cleanBase.addColorStop(1, '#A0D8B2');
-    cctx.fillStyle = cleanBase;
-    cctx.fillRect(0, 0, TILE, TILE);
-    // Polished shine streaks
-    cctx.strokeStyle = 'rgba(220, 255, 235, 0.45)';
-    cctx.lineWidth = 1.5;
-    for (let i = 0; i < 4; i++) {
-        const y = 6 + i * 11;
-        cctx.beginPath();
-        cctx.moveTo(2, y);
-        cctx.bezierCurveTo(TILE * 0.3, y - 1, TILE * 0.7, y + 1.5, TILE - 2, y + 0.5);
-        cctx.stroke();
-    }
-    // Specular highlight spot
-    const spec = cctx.createRadialGradient(16, 14, 0, 16, 14, 12);
-    spec.addColorStop(0, 'rgba(255, 255, 255, 0.18)');
-    spec.addColorStop(1, 'rgba(255, 255, 255, 0)');
-    cctx.fillStyle = spec;
-    cctx.fillRect(0, 0, TILE, TILE);
-    // Plank seam to match
-    cctx.strokeStyle = 'rgba(100, 170, 130, 0.2)';
-    cctx.lineWidth = 0.5;
-    cctx.beginPath();
-    cctx.moveTo(0, TILE - 0.5);
-    cctx.lineTo(TILE, TILE - 0.5);
-    cctx.stroke();
-    cleanPattern = ctx.createPattern(cc, 'repeat');
-}
-
-function drawGrid() {
-    for (let r = 0; r < ROWS; r++) {
-        for (let c = 0; c < COLS; c++) {
-            const x = c * TILE;
-            const y = r * TILE;
-            const cell = grid[r][c];
-
-            if (cell === DIRTY) {
-                ctx.fillStyle = floorPattern || COLORS.dirty;
-            } else if (cell === CLEAN) {
-                const fadeKey = `${c},${r}`;
-                if (tileCleanFade[fadeKey] !== undefined && tileCleanFade[fadeKey] < 1) {
-                    // Smooth fade from dirty to clean
-                    ctx.fillStyle = floorPattern || COLORS.dirty;
-                    ctx.fillRect(x, y, TILE, TILE);
-                    tileCleanFade[fadeKey] = Math.min(1, tileCleanFade[fadeKey] + 0.05);
-                    ctx.save();
-                    ctx.globalAlpha = tileCleanFade[fadeKey];
-                    ctx.fillStyle = cleanPattern || COLORS.clean;
-                    ctx.fillRect(x, y, TILE, TILE);
-                    ctx.restore();
-                    continue;
-                }
-                ctx.fillStyle = cleanPattern || COLORS.clean;
-            } else if (cell === CHARGER) {
-                drawChargerTile(x, y);
-                continue;
-            } else if (cell === OBSTACLE) {
-                ctx.fillStyle = floorPattern || COLORS.dirty;
-            }
-
-            ctx.fillRect(x, y, TILE, TILE);
-
-            // Plank seam lines (horizontal between rows, vertical offset)
-            ctx.strokeStyle = 'rgba(100, 80, 50, 0.08)';
-            ctx.lineWidth = 0.8;
-            // Bottom seam
-            ctx.beginPath();
-            ctx.moveTo(x, y + TILE - 0.5);
-            ctx.lineTo(x + TILE, y + TILE - 0.5);
-            ctx.stroke();
-            // Vertical seam (staggered per row like real wood planks)
-            if ((r + c) % 3 === 0) {
-                ctx.beginPath();
-                ctx.moveTo(x + TILE - 0.5, y);
-                ctx.lineTo(x + TILE - 0.5, y + TILE);
-                ctx.stroke();
-            }
-
-            // Dirt/debris marks on dirty tiles (seeded by position for consistency)
-            if (cell === DIRTY) {
-                const seed = (r * 17 + c * 31) % 100;
-                if (seed < 40) {
-                    // Small crumb/debris
-                    ctx.fillStyle = `rgba(130, 105, 75, ${0.15 + (seed % 10) * 0.02})`;
-                    ctx.beginPath();
-                    ctx.arc(x + 10 + (seed % 28), y + 8 + ((seed * 3) % 32), 0.8 + (seed % 3) * 0.4, 0, Math.PI * 2);
-                    ctx.fill();
-                }
-                if (seed > 25 && seed < 65) {
-                    // Scuff mark
-                    ctx.strokeStyle = `rgba(120, 100, 70, 0.06)`;
-                    ctx.lineWidth = 0.5;
-                    ctx.beginPath();
-                    ctx.moveTo(x + (seed % 20) + 5, y + ((seed * 2) % 30) + 8);
-                    ctx.lineTo(x + (seed % 20) + 15, y + ((seed * 2) % 30) + 12);
-                    ctx.stroke();
-                }
-            }
-        }
-    }
-}
-
-function drawChargerTile(x, y) {
-    // Floor base underneath
-    ctx.fillStyle = '#E0D4C0';
-    ctx.fillRect(x, y, TILE, TILE);
-
-    // Pulsing ambient glow on floor
-    const pulse = 0.15 + 0.15 * Math.sin(chargerPulse * 0.04);
-    const glowGrad = ctx.createRadialGradient(x + TILE/2, y + TILE/2, 2, x + TILE/2, y + TILE/2, TILE * 0.7);
-    glowGrad.addColorStop(0, `rgba(60, 180, 255, ${pulse * 1.5})`);
-    glowGrad.addColorStop(0.6, `rgba(60, 140, 255, ${pulse * 0.5})`);
-    glowGrad.addColorStop(1, `rgba(60, 140, 255, 0)`);
-    ctx.fillStyle = glowGrad;
-    ctx.fillRect(x, y, TILE, TILE);
-
-    // Shadow under dock
-    ctx.fillStyle = 'rgba(0,0,0,0.18)';
-    ctx.beginPath();
-    ctx.ellipse(x + TILE/2 + 1, y + TILE/2 + 2, 17, 15, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Dock base - metallic platform
-    const dockGrad = ctx.createLinearGradient(x + 5, y + 5, x + TILE - 5, y + TILE - 5);
-    dockGrad.addColorStop(0, '#6A6A6A');
-    dockGrad.addColorStop(0.3, '#555');
-    dockGrad.addColorStop(0.7, '#4A4A4A');
-    dockGrad.addColorStop(1, '#3A3A3A');
-    ctx.fillStyle = dockGrad;
-    roundRect(ctx, x + 5, y + 5, TILE - 10, TILE - 10, 8);
-    ctx.fill();
-    // Metallic rim highlight
-    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
-    ctx.lineWidth = 1;
-    roundRect(ctx, x + 5, y + 5, TILE - 10, TILE - 10, 8);
-    ctx.stroke();
-
-    // Inner recessed area
-    const innerGrad = ctx.createRadialGradient(x + TILE/2 - 2, y + TILE/2 - 2, 0, x + TILE/2, y + TILE/2, 14);
-    innerGrad.addColorStop(0, '#3A3A3A');
-    innerGrad.addColorStop(1, '#222');
-    ctx.fillStyle = innerGrad;
-    roundRect(ctx, x + 9, y + 9, TILE - 18, TILE - 18, 6);
-    ctx.fill();
-
-    // Contact pins (two small metallic bumps)
-    ctx.fillStyle = '#888';
-    ctx.beginPath();
-    ctx.arc(x + TILE/2 - 6, y + TILE - 14, 2, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(x + TILE/2 + 6, y + TILE - 14, 2, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,0.3)';
-    ctx.beginPath();
-    ctx.arc(x + TILE/2 - 6, y + TILE - 14.5, 1, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(x + TILE/2 + 6, y + TILE - 14.5, 1, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Lightning bolt with glow
-    const cx = x + TILE / 2, cy = y + TILE / 2 - 2;
-    ctx.save();
-    ctx.shadowColor = '#FFD600';
-    ctx.shadowBlur = 6 + 4 * Math.sin(chargerPulse * 0.06);
-    ctx.fillStyle = '#FFD600';
-    ctx.beginPath();
-    ctx.moveTo(cx - 2, cy - 8);
-    ctx.lineTo(cx + 5, cy - 8);
-    ctx.lineTo(cx + 1, cy - 1);
-    ctx.lineTo(cx + 5, cy - 1);
-    ctx.lineTo(cx - 2, cy + 8);
-    ctx.lineTo(cx + 1, cy + 1);
-    ctx.lineTo(cx - 4, cy + 1);
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
-
-    // LED indicator light
-    const ledAlpha = 0.6 + 0.4 * Math.sin(chargerPulse * 0.08);
-    ctx.fillStyle = `rgba(0, 220, 100, ${ledAlpha})`;
-    ctx.beginPath();
-    ctx.arc(x + TILE - 11, y + 11, 2, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Grid line
-    ctx.strokeStyle = 'rgba(0,0,0,0.06)';
-    ctx.lineWidth = 0.5;
-    ctx.strokeRect(x, y, TILE, TILE);
-}
-
-function drawObstacles() {
-    const level = LEVELS[currentLevel];
-
-    // First pass: ambient occlusion / contact shadows under furniture
-    for (const obs of level.obstacles) {
-        if (obs.type === 'wall') continue; // walls sit flush
-        const x = obs.col * TILE;
-        const y = obs.row * TILE;
-        const w = obs.w * TILE;
-        const h = obs.h * TILE;
-        const pad = 3;
-        ctx.save();
-        ctx.fillStyle = 'rgba(0,0,0,0.06)';
-        // Soft spread shadow
-        roundRect(ctx, x + pad - 2, y + pad + 2, w - pad * 2 + 4, h - pad * 2 + 4, 6);
-        ctx.fill();
-        ctx.restore();
-    }
-
-    // Second pass: actual obstacle rendering
-    for (const obs of level.obstacles) {
-        const x = obs.col * TILE;
-        const y = obs.row * TILE;
-        const w = obs.w * TILE;
-        const h = obs.h * TILE;
-
-        ctx.save();
-
-        if (obs.type === 'couch') {
-            drawCouch(x, y, w, h);
-        } else if (obs.type === 'table') {
-            drawTable(x, y, w, h);
-        } else if (obs.type === 'chair') {
-            drawChair(x, y);
-        } else if (obs.type === 'plant') {
-            drawPlant(x, y);
-        } else if (obs.type === 'wall') {
-            drawWall(x, y);
-        } else if (obs.type === 'petbed') {
-            drawPetBed(x, y, w, h);
-        }
-
-        ctx.restore();
-    }
-}
-
-function drawCouch(x, y, w, h) {
-    const pad = 2;
-    const numCush = Math.round(w / TILE);
-
-    // Deep drop shadow
-    ctx.save();
-    ctx.shadowColor = 'rgba(0,0,0,0.35)';
-    ctx.shadowBlur = 8;
-    ctx.shadowOffsetX = 3;
-    ctx.shadowOffsetY = 4;
-    ctx.fillStyle = '#3E2723';
-    roundRect(ctx, x + pad, y + pad, w - pad * 2, h - pad * 2, 8);
-    ctx.fill();
-    ctx.restore();
-
-    // Couch base frame (visible at bottom)
-    ctx.fillStyle = '#2E1B14';
-    roundRect(ctx, x + pad + 2, y + h - pad - 4, w - pad * 2 - 4, 4, 2);
-    ctx.fill();
-    // Feet/legs
-    ctx.fillStyle = '#1A1008';
-    ctx.fillRect(x + pad + 4, y + h - pad - 2, 5, 3);
-    ctx.fillRect(x + w - pad - 9, y + h - pad - 2, 5, 3);
-
-    // Main body - rich leather with multi-stop gradient
-    const bodyGrad = ctx.createLinearGradient(x, y, x, y + h);
-    bodyGrad.addColorStop(0, '#8B6B5A');
-    bodyGrad.addColorStop(0.08, '#7B5B4F');
-    bodyGrad.addColorStop(0.2, '#6D4C41');
-    bodyGrad.addColorStop(0.5, '#5D4037');
-    bodyGrad.addColorStop(0.8, '#4E342E');
-    bodyGrad.addColorStop(1, '#3E2723');
-    ctx.fillStyle = bodyGrad;
-    roundRect(ctx, x + pad, y + pad, w - pad * 2, h - pad * 2 - 3, 8);
-    ctx.fill();
-
-    // Backrest - taller, rounded top, darker recessed area
-    const backH = 14;
-    const backGrad = ctx.createLinearGradient(x, y + pad, x, y + pad + backH);
-    backGrad.addColorStop(0, '#3E2723');
-    backGrad.addColorStop(0.3, '#4A302A');
-    backGrad.addColorStop(0.6, '#5D4037');
-    backGrad.addColorStop(1, '#4E342E');
-    ctx.fillStyle = backGrad;
-    roundRect(ctx, x + pad + 1, y + pad, w - pad * 2 - 2, backH, 7);
-    ctx.fill();
-    // Backrest shadow crease
-    ctx.strokeStyle = 'rgba(0,0,0,0.2)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(x + pad + 6, y + pad + backH);
-    ctx.lineTo(x + w - pad - 6, y + pad + backH);
-    ctx.stroke();
-
-    // Individual cushions with realistic puffy shape
-    const cushTop = y + pad + backH + 1;
-    const cushH = h - pad * 2 - backH - 5;
-    const cushW = (w - pad * 2 - 2) / numCush;
-    for (let i = 0; i < numCush; i++) {
-        const cx = x + pad + 1 + i * cushW;
-        // Cushion body
-        const cGrad = ctx.createRadialGradient(cx + cushW/2 - 2, cushTop + cushH/2 - 2, 0, cx + cushW/2, cushTop + cushH/2, cushW * 0.7);
-        cGrad.addColorStop(0, '#7A5A4A');
-        cGrad.addColorStop(0.4, '#6D4C41');
-        cGrad.addColorStop(1, '#5D4037');
-        ctx.fillStyle = cGrad;
-        roundRect(ctx, cx + 1, cushTop, cushW - 2, cushH, 5);
-        ctx.fill();
-        // Puffy highlight
-        const pGrad = ctx.createRadialGradient(cx + cushW/2 - 3, cushTop + 3, 0, cx + cushW/2, cushTop + cushH/2, cushW * 0.5);
-        pGrad.addColorStop(0, 'rgba(255,255,255,0.1)');
-        pGrad.addColorStop(1, 'rgba(0,0,0,0)');
-        ctx.fillStyle = pGrad;
-        roundRect(ctx, cx + 2, cushTop + 1, cushW - 4, cushH - 2, 4);
-        ctx.fill();
-        // Cushion crease at bottom
-        ctx.strokeStyle = 'rgba(0,0,0,0.15)';
-        ctx.lineWidth = 0.5;
-        ctx.beginPath();
-        ctx.ellipse(cx + cushW/2, cushTop + cushH - 4, cushW * 0.35, 2, 0, 0, Math.PI);
-        ctx.stroke();
-    }
-    // Divider shadows between cushions
-    for (let i = 1; i < numCush; i++) {
-        const dx = x + pad + 1 + i * cushW;
-        ctx.strokeStyle = 'rgba(0,0,0,0.3)';
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.moveTo(dx, cushTop + 2);
-        ctx.bezierCurveTo(dx - 0.5, cushTop + cushH * 0.4, dx + 0.5, cushTop + cushH * 0.6, dx, cushTop + cushH - 2);
-        ctx.stroke();
-    }
-
-    // Armrests - 3D rounded with highlight
-    for (const side of ['left', 'right']) {
-        const ax = side === 'left' ? x + pad - 1 : x + w - pad - 8;
-        const aGrad = ctx.createLinearGradient(ax, 0, ax + 9, 0);
-        if (side === 'left') {
-            aGrad.addColorStop(0, '#6A4A3A');
-            aGrad.addColorStop(0.4, '#5A3E32');
-            aGrad.addColorStop(1, '#4E342E');
-        } else {
-            aGrad.addColorStop(0, '#4E342E');
-            aGrad.addColorStop(0.6, '#5A3E32');
-            aGrad.addColorStop(1, '#6A4A3A');
-        }
-        ctx.fillStyle = aGrad;
-        roundRect(ctx, ax, y + pad + 2, 9, h - pad * 2 - 5, 5);
-        ctx.fill();
-        // Armrest top highlight
-        ctx.fillStyle = 'rgba(255,255,255,0.08)';
-        roundRect(ctx, ax + 1, y + pad + 2, 7, 3, 2);
-        ctx.fill();
-    }
-
-    // Fabric texture - subtle crosshatch
-    ctx.save();
-    ctx.globalAlpha = 0.03;
-    ctx.strokeStyle = '#000';
-    ctx.lineWidth = 0.3;
-    for (let ty = y + pad; ty < y + h - pad; ty += 3) {
-        ctx.beginPath();
-        ctx.moveTo(x + pad, ty);
-        ctx.lineTo(x + w - pad, ty);
-        ctx.stroke();
-    }
-    ctx.restore();
-
-    // Piping/trim along top edge
-    ctx.strokeStyle = 'rgba(255,220,180,0.08)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(x + pad + 10, y + pad + 1);
-    ctx.lineTo(x + w - pad - 10, y + pad + 1);
-    ctx.stroke();
-}
-
-function drawTable(x, y, w, h) {
-    const pad = 3;
-
-    // Table legs (wooden, visible peeking out from under surface)
-    const legW = 5, legH = 6;
-    for (const [lx, ly] of [
-        [x + pad + 4, y + pad + 4],
-        [x + w - pad - legW - 4, y + pad + 4],
-        [x + pad + 4, y + h - pad - legH - 3],
-        [x + w - pad - legW - 4, y + h - pad - legH - 3],
-    ]) {
-        const legGrad = ctx.createLinearGradient(lx, 0, lx + legW, 0);
-        legGrad.addColorStop(0, '#5A4030');
-        legGrad.addColorStop(0.5, '#6D5040');
-        legGrad.addColorStop(1, '#4A3525');
-        ctx.fillStyle = legGrad;
-        ctx.fillRect(lx, ly, legW, legH);
-        ctx.fillStyle = 'rgba(255,255,255,0.12)';
-        ctx.fillRect(lx, ly, legW, 1);
-    }
-
-    // Drop shadow
-    ctx.save();
-    ctx.shadowColor = 'rgba(0,0,0,0.3)';
-    ctx.shadowBlur = 7;
-    ctx.shadowOffsetX = 2;
-    ctx.shadowOffsetY = 3;
-    ctx.fillStyle = '#7D5E53';
-    roundRect(ctx, x + pad, y + pad, w - pad * 2, h - pad * 2, 4);
-    ctx.fill();
-    ctx.restore();
-
-    // Table edge/apron (thicker wood border visible from top-down)
-    const edgeGrad = ctx.createLinearGradient(x + pad, 0, x + w - pad, 0);
-    edgeGrad.addColorStop(0, '#6D5040');
-    edgeGrad.addColorStop(0.5, '#7D5E53');
-    edgeGrad.addColorStop(1, '#5A4535');
-    ctx.fillStyle = edgeGrad;
-    roundRect(ctx, x + pad, y + pad, w - pad * 2, h - pad * 2, 4);
-    ctx.fill();
-
-    // Table surface (inset from edge, lighter wood)
-    const inset = 3;
-    const surfGrad = ctx.createLinearGradient(x, y, x + w * 0.7, y + h);
-    surfGrad.addColorStop(0, '#C4A080');
-    surfGrad.addColorStop(0.2, '#B89474');
-    surfGrad.addColorStop(0.5, '#A88468');
-    surfGrad.addColorStop(0.8, '#9A7660');
-    surfGrad.addColorStop(1, '#8D6E58');
-    ctx.fillStyle = surfGrad;
-    roundRect(ctx, x + pad + inset, y + pad + inset, w - pad * 2 - inset * 2, h - pad * 2 - inset * 2, 3);
-    ctx.fill();
-
-    // Rich wood grain - organic curves
-    const grainCount = Math.floor(h / 5);
-    for (let i = 0; i < grainCount; i++) {
-        const gy = y + pad + inset + 3 + i * 5;
-        if (gy > y + h - pad - inset - 2) break;
-        const alpha = 0.04 + (Math.sin(i * 2.3) * 0.02 + 0.02);
-        ctx.strokeStyle = `rgba(80, 50, 25, ${alpha})`;
-        ctx.lineWidth = 0.3 + Math.sin(i * 1.1) * 0.3;
-        ctx.beginPath();
-        ctx.moveTo(x + pad + inset + 2, gy);
-        const cp1x = x + w * 0.25 + Math.sin(i * 0.7) * 5;
-        const cp2x = x + w * 0.75 - Math.cos(i * 0.5) * 4;
-        ctx.bezierCurveTo(cp1x, gy + Math.sin(i) * 2, cp2x, gy - Math.cos(i) * 1.5, x + w - pad - inset - 2, gy + Math.sin(i * 0.3) * 1);
-        ctx.stroke();
-    }
-
-    // Wood knot
-    const kx = x + w * 0.6, ky = y + h * 0.4;
-    ctx.strokeStyle = 'rgba(80, 50, 25, 0.08)';
-    ctx.lineWidth = 0.5;
-    ctx.beginPath();
-    ctx.ellipse(kx, ky, 4, 3, 0.3, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.fillStyle = 'rgba(100, 65, 35, 0.06)';
-    ctx.beginPath();
-    ctx.ellipse(kx, ky, 3, 2, 0.3, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Surface reflection/sheen
-    const sheen = ctx.createLinearGradient(x + pad, y + pad, x + w * 0.6, y + h * 0.4);
-    sheen.addColorStop(0, 'rgba(255,255,255,0.1)');
-    sheen.addColorStop(0.3, 'rgba(255,255,255,0.03)');
-    sheen.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = sheen;
-    roundRect(ctx, x + pad + inset, y + pad + inset, w - pad * 2 - inset * 2, h - pad * 2 - inset * 2, 3);
-    ctx.fill();
-
-    // Beveled edge - light on top-left, shadow on bottom-right
-    ctx.strokeStyle = 'rgba(255,255,255,0.18)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(x + pad + 4, y + pad);
-    ctx.lineTo(x + w - pad - 4, y + pad);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(x + pad, y + pad + 4);
-    ctx.lineTo(x + pad, y + h - pad - 4);
-    ctx.stroke();
-    ctx.strokeStyle = 'rgba(0,0,0,0.15)';
-    ctx.beginPath();
-    ctx.moveTo(x + pad + 4, y + h - pad);
-    ctx.lineTo(x + w - pad - 4, y + h - pad);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(x + w - pad, y + pad + 4);
-    ctx.lineTo(x + w - pad, y + h - pad - 4);
-    ctx.stroke();
-}
-
-function drawChair(x, y) {
-    const pad = 4;
-    const cx = x + TILE / 2, cy = y + TILE / 2;
-
-    // Four wooden legs (seen from above)
-    const legs = [[pad + 3, pad + 3], [TILE - pad - 6, pad + 3], [pad + 3, TILE - pad - 5], [TILE - pad - 6, TILE - pad - 5]];
-    for (const [lx, ly] of legs) {
-        const legGrad = ctx.createRadialGradient(x + lx + 1.5, y + ly + 1, 0, x + lx + 1.5, y + ly + 1.5, 3);
-        legGrad.addColorStop(0, '#AA8866');
-        legGrad.addColorStop(1, '#775533');
-        ctx.fillStyle = legGrad;
-        ctx.beginPath();
-        ctx.arc(x + lx + 1.5, y + ly + 1.5, 2.5, 0, Math.PI * 2);
-        ctx.fill();
-        // Leg highlight
-        ctx.fillStyle = 'rgba(255,255,255,0.15)';
-        ctx.beginPath();
-        ctx.arc(x + lx + 1, y + ly + 1, 1, 0, Math.PI * 2);
-        ctx.fill();
-    }
-
-    // Chair shadow
-    ctx.save();
-    ctx.shadowColor = 'rgba(0,0,0,0.25)';
-    ctx.shadowBlur = 6;
-    ctx.shadowOffsetX = 2;
-    ctx.shadowOffsetY = 2;
-    ctx.fillStyle = '#757575';
-    roundRect(ctx, x + pad + 1, y + pad + 1, TILE - pad * 2 - 2, TILE - pad * 2 - 2, 5);
-    ctx.fill();
-    ctx.restore();
-
-    // Seat cushion - padded fabric
-    const seatGrad = ctx.createRadialGradient(cx - 3, cy - 1, 0, cx, cy + 2, 20);
-    seatGrad.addColorStop(0, '#B0B0B0');
-    seatGrad.addColorStop(0.3, '#989898');
-    seatGrad.addColorStop(0.7, '#808080');
-    seatGrad.addColorStop(1, '#686868');
-    ctx.fillStyle = seatGrad;
-    roundRect(ctx, x + pad + 1, y + pad + 1, TILE - pad * 2 - 2, TILE - pad * 2 - 2, 5);
-    ctx.fill();
-
-    // Backrest - raised darker section at top
-    const backH = 12;
-    const backGrad = ctx.createLinearGradient(x, y + pad, x, y + pad + backH);
-    backGrad.addColorStop(0, '#606060');
-    backGrad.addColorStop(0.3, '#555');
-    backGrad.addColorStop(0.7, '#656565');
-    backGrad.addColorStop(1, '#757575');
-    ctx.fillStyle = backGrad;
-    roundRect(ctx, x + pad + 1, y + pad, TILE - pad * 2 - 2, backH, 5);
-    ctx.fill();
-    // Backrest shadow below it
-    ctx.strokeStyle = 'rgba(0,0,0,0.12)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(x + pad + 4, y + pad + backH);
-    ctx.lineTo(x + TILE - pad - 4, y + pad + backH);
-    ctx.stroke();
-
-    // Seat cushion puffy center
-    const puffGrad = ctx.createRadialGradient(cx - 1, cy + 3, 0, cx, cy + 3, 12);
-    puffGrad.addColorStop(0, 'rgba(255,255,255,0.1)');
-    puffGrad.addColorStop(0.6, 'rgba(255,255,255,0.02)');
-    puffGrad.addColorStop(1, 'rgba(0,0,0,0.04)');
-    ctx.fillStyle = puffGrad;
-    ctx.beginPath();
-    ctx.ellipse(cx, cy + 3, 13, 10, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Button tufting (center of seat)
-    ctx.fillStyle = 'rgba(0,0,0,0.12)';
-    ctx.beginPath();
-    ctx.arc(cx, cy + 4, 1.5, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,0.08)';
-    ctx.beginPath();
-    ctx.arc(cx - 0.5, cy + 3.5, 0.8, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Fabric texture lines
-    ctx.save();
-    ctx.globalAlpha = 0.03;
-    ctx.strokeStyle = '#000';
-    ctx.lineWidth = 0.3;
-    for (let ty = y + pad + backH + 2; ty < y + TILE - pad; ty += 2.5) {
-        ctx.beginPath();
-        ctx.moveTo(x + pad + 3, ty);
-        ctx.lineTo(x + TILE - pad - 3, ty);
-        ctx.stroke();
-    }
-    ctx.restore();
-
-    // Edge piping
-    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
-    ctx.lineWidth = 0.8;
-    roundRect(ctx, x + pad + 2, y + pad + 1, TILE - pad * 2 - 4, TILE - pad * 2 - 3, 4);
-    ctx.stroke();
-}
-
-function drawPlant(x, y) {
-    const cx = x + TILE / 2;
-
-    // Ground shadow
-    ctx.save();
-    ctx.shadowColor = 'rgba(0,0,0,0.25)';
-    ctx.shadowBlur = 6;
-    ctx.shadowOffsetX = 2;
-    ctx.shadowOffsetY = 3;
-
-    // Terracotta pot - realistic cylindrical shading
-    const potGrad = ctx.createLinearGradient(x + 10, y + 24, x + 38, y + 24);
-    potGrad.addColorStop(0, '#7A4428');
-    potGrad.addColorStop(0.15, '#9A5835');
-    potGrad.addColorStop(0.35, '#C07848');
-    potGrad.addColorStop(0.5, '#D08858');
-    potGrad.addColorStop(0.65, '#C07848');
-    potGrad.addColorStop(0.85, '#9A5835');
-    potGrad.addColorStop(1, '#6A3820');
-    ctx.fillStyle = potGrad;
-    ctx.beginPath();
-    ctx.moveTo(x + 13, y + 44);
-    ctx.lineTo(x + 35, y + 44);
-    ctx.lineTo(x + 32, y + 27);
-    ctx.lineTo(x + 16, y + 27);
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
-
-    // Pot texture - subtle terracotta speckle
-    ctx.save();
-    ctx.globalAlpha = 0.06;
-    for (let i = 0; i < 12; i++) {
-        ctx.fillStyle = i % 2 ? '#FFF' : '#000';
-        ctx.beginPath();
-        ctx.arc(x + 16 + (i * 7 % 18), y + 30 + (i * 3 % 12), 0.5 + (i % 3) * 0.3, 0, Math.PI * 2);
-        ctx.fill();
-    }
-    ctx.restore();
-
-    // Pot rim - thick rounded lip
-    const rimGrad = ctx.createLinearGradient(x + 11, y + 22, x + 11, y + 29);
-    rimGrad.addColorStop(0, '#D8986A');
-    rimGrad.addColorStop(0.3, '#C88050');
-    rimGrad.addColorStop(0.7, '#B06838');
-    rimGrad.addColorStop(1, '#8A5030');
-    ctx.fillStyle = rimGrad;
-    roundRect(ctx, x + 12, y + 22, 24, 6, 3);
-    ctx.fill();
-    // Rim top highlight
-    ctx.fillStyle = 'rgba(255,255,255,0.2)';
-    roundRect(ctx, x + 13, y + 22, 22, 2, 2);
-    ctx.fill();
-
-    // Soil - dark earth with pebbles
-    ctx.fillStyle = '#2E1A0E';
-    ctx.beginPath();
-    ctx.ellipse(cx, y + 27, 10, 3.5, 0, 0, Math.PI * 2);
-    ctx.fill();
-    // Soil highlights (small pebbles/bark)
-    const soilBits = [[cx-4, y+26, '#4A3520'], [cx+3, y+27, '#5A4530'], [cx-1, y+25.5, '#3A2515'], [cx+5, y+26.5, '#45301A']];
-    for (const [sx, sy, sc] of soilBits) {
-        ctx.fillStyle = sc;
-        ctx.beginPath();
-        ctx.arc(sx, sy, 1 + Math.random() * 0.5, 0, Math.PI * 2);
-        ctx.fill();
-    }
-
-    // Main stem + branches
-    ctx.strokeStyle = '#33691E';
-    ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    ctx.moveTo(cx, y + 25);
-    ctx.bezierCurveTo(cx - 1, y + 20, cx + 1, y + 16, cx, y + 12);
-    ctx.stroke();
-    // Side branches
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(cx, y + 18);
-    ctx.bezierCurveTo(cx - 4, y + 15, cx - 8, y + 12, cx - 10, y + 9);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(cx, y + 16);
-    ctx.bezierCurveTo(cx + 3, y + 13, cx + 7, y + 11, cx + 9, y + 8);
-    ctx.stroke();
-
-    // Individual leaves with pointed shape and veins
-    const leafData = [
-        { bx: cx, by: y + 12, angle: -1.2, len: 10, color: '#43A047' },
-        { bx: cx - 10, by: y + 9, angle: -0.8, len: 8, color: '#388E3C' },
-        { bx: cx + 9, by: y + 8, angle: -0.3, len: 9, color: '#4CAF50' },
-        { bx: cx - 3, by: y + 10, angle: -2.0, len: 7, color: '#2E7D32' },
-        { bx: cx + 4, by: y + 14, angle: 0.2, len: 8, color: '#66BB6A' },
-        { bx: cx - 6, by: y + 14, angle: -2.5, len: 6, color: '#388E3C' },
-        { bx: cx, by: y + 8, angle: -1.5, len: 9, color: '#4CAF50' },
-        { bx: cx + 2, by: y + 6, angle: -1.0, len: 7, color: '#2E7D32' },
-    ];
-    for (const l of leafData) {
-        const tipX = l.bx + Math.cos(l.angle) * l.len;
-        const tipY = l.by + Math.sin(l.angle) * l.len;
-        const perpX = Math.cos(l.angle + Math.PI / 2) * l.len * 0.3;
-        const perpY = Math.sin(l.angle + Math.PI / 2) * l.len * 0.3;
-        const midX = (l.bx + tipX) / 2;
-        const midY = (l.by + tipY) / 2;
-
-        // Leaf shape
-        const lGrad = ctx.createLinearGradient(l.bx, l.by, tipX, tipY);
-        lGrad.addColorStop(0, shadeColor(l.color, 10));
-        lGrad.addColorStop(0.5, l.color);
-        lGrad.addColorStop(1, shadeColor(l.color, -15));
-        ctx.fillStyle = lGrad;
-        ctx.beginPath();
-        ctx.moveTo(l.bx, l.by);
-        ctx.quadraticCurveTo(midX + perpX, midY + perpY, tipX, tipY);
-        ctx.quadraticCurveTo(midX - perpX, midY - perpY, l.bx, l.by);
-        ctx.fill();
-
-        // Central vein
-        ctx.strokeStyle = 'rgba(255,255,255,0.12)';
-        ctx.lineWidth = 0.4;
-        ctx.beginPath();
-        ctx.moveTo(l.bx, l.by);
-        ctx.lineTo(tipX, tipY);
-        ctx.stroke();
-    }
-
-    // Foliage specular highlight
-    const foliageSpec = ctx.createRadialGradient(cx - 4, y + 9, 0, cx - 2, y + 10, 8);
-    foliageSpec.addColorStop(0, 'rgba(255,255,255,0.22)');
-    foliageSpec.addColorStop(0.5, 'rgba(255,255,255,0.05)');
-    foliageSpec.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.fillStyle = foliageSpec;
-    ctx.beginPath();
-    ctx.arc(cx - 3, y + 10, 8, 0, Math.PI * 2);
-    ctx.fill();
-}
-
-function drawWall(x, y) {
-    // 3D wall thickness (south and east faces visible from top-down)
-    const depth = 5;
-
-    // South face (bottom edge, darker)
-    const southGrad = ctx.createLinearGradient(x, y + TILE, x, y + TILE + depth);
-    southGrad.addColorStop(0, '#4A4040');
-    southGrad.addColorStop(1, '#353030');
-    ctx.fillStyle = southGrad;
-    ctx.fillRect(x + depth, y + TILE - depth, TILE - depth, depth);
-
-    // East face (right edge, medium dark)
-    const eastGrad = ctx.createLinearGradient(x + TILE, y, x + TILE + depth, y);
-    eastGrad.addColorStop(0, '#504545');
-    eastGrad.addColorStop(1, '#3A3535');
-    ctx.fillStyle = eastGrad;
-    ctx.fillRect(x + TILE - depth, y + depth, depth, TILE - depth);
-
-    // Corner (darkest)
-    ctx.fillStyle = '#302828';
-    ctx.fillRect(x + TILE - depth, y + TILE - depth, depth, depth);
-
-    // Mortar/grout base for top face
-    ctx.fillStyle = '#908580';
-    ctx.fillRect(x, y, TILE - depth, TILE - depth);
-
-    // Brick pattern with individual brick colors and 3D per-brick
-    const brickH = (TILE - depth) / 4;
-    const brickW = (TILE - depth) / 2;
-    const brickColors = ['#7B6060', '#826565', '#6E5555', '#755D5D', '#8A7070', '#695050'];
-    let colorIdx = 0;
-    for (let row = 0; row < 4; row++) {
-        const by = y + row * brickH;
-        const offset = (row % 2) * (brickW / 2);
-        for (let col = -1; col < 3; col++) {
-            const bx = x + offset + col * brickW;
-            const brickLeft = Math.max(x, bx + 1);
-            const brickRight = Math.min(x + TILE - depth, bx + brickW - 1);
-            const brickTop = by + 1;
-            const brickBot = Math.min(y + TILE - depth, by + brickH - 1);
-            if (brickRight <= brickLeft || brickBot <= brickTop) continue;
-            const bW = brickRight - brickLeft;
-            const bH = brickBot - brickTop;
-
-            // Brick fill with gradient
-            const baseColor = brickColors[(colorIdx++) % brickColors.length];
-            const bGrad = ctx.createLinearGradient(brickLeft, brickTop, brickLeft, brickBot);
-            bGrad.addColorStop(0, shadeColor(baseColor, 8));
-            bGrad.addColorStop(0.5, baseColor);
-            bGrad.addColorStop(1, shadeColor(baseColor, -8));
-            ctx.fillStyle = bGrad;
-            ctx.fillRect(brickLeft, brickTop, bW, bH);
-
-            // 3D brick edges - top/left lighter
-            ctx.fillStyle = 'rgba(255,255,255,0.12)';
-            ctx.fillRect(brickLeft, brickTop, bW, 1.5);
-            ctx.fillRect(brickLeft, brickTop, 1, bH);
-            // bottom/right darker (recessed mortar shadow)
-            ctx.fillStyle = 'rgba(0,0,0,0.18)';
-            ctx.fillRect(brickLeft, brickBot - 1.5, bW, 1.5);
-            ctx.fillRect(brickRight - 1, brickTop, 1, bH);
-
-            // Brick surface variation (speckle)
-            ctx.fillStyle = `rgba(0,0,0,${0.01 + (colorIdx % 3) * 0.01})`;
-            ctx.beginPath();
-            ctx.arc(brickLeft + bW * 0.3, brickTop + bH * 0.4, 1.5, 0, Math.PI * 2);
-            ctx.fill();
-        }
-    }
-
-    // Top face - outer 3D edge bevel
-    ctx.fillStyle = 'rgba(255,255,255,0.1)';
-    ctx.fillRect(x, y, TILE - depth, 2.5);
-    ctx.fillRect(x, y, 2.5, TILE - depth);
-    ctx.fillStyle = 'rgba(0,0,0,0.15)';
-    ctx.fillRect(x, y + TILE - depth - 2.5, TILE - depth, 2.5);
-    ctx.fillRect(x + TILE - depth - 2.5, y, 2.5, TILE - depth);
-}
-
-// Helper to darken/lighten a hex color
-function shadeColor(color, amount) {
-    const num = parseInt(color.slice(1), 16);
-    const r = Math.min(255, Math.max(0, (num >> 16) + amount));
-    const g = Math.min(255, Math.max(0, ((num >> 8) & 0xFF) + amount));
-    const b = Math.min(255, Math.max(0, (num & 0xFF) + amount));
-    return `#${(r << 16 | g << 8 | b).toString(16).padStart(6, '0')}`;
-}
-
-function drawPetBed(x, y, w, h) {
-    const cx = x + w / 2, cy = y + h / 2;
-
-    // Soft ground shadow
-    ctx.save();
-    ctx.shadowColor = 'rgba(0,0,0,0.22)';
-    ctx.shadowBlur = 7;
-    ctx.shadowOffsetX = 2;
-    ctx.shadowOffsetY = 3;
-
-    // Outer rim - plush bolster with fabric gradient
-    const rimGrad = ctx.createRadialGradient(cx - 6, cy - 4, 0, cx, cy, w / 2);
-    rimGrad.addColorStop(0, '#F8B0B0');
-    rimGrad.addColorStop(0.3, '#EF9A9A');
-    rimGrad.addColorStop(0.6, '#E57373');
-    rimGrad.addColorStop(0.85, '#D32F2F');
-    rimGrad.addColorStop(1, '#B71C1C');
-    ctx.fillStyle = rimGrad;
-    ctx.beginPath();
-    ctx.ellipse(cx, cy, w / 2 - 2, h / 2 - 1, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-
-    // Individual bolster bumps (3D puffy sections around rim)
-    const numBumps = 10;
-    for (let i = 0; i < numBumps; i++) {
-        const a = (i / numBumps) * Math.PI * 2;
-        const br = w / 2 - 7;
-        const bx = cx + Math.cos(a) * br;
-        const by = cy + Math.sin(a) * (h / 2 - 5);
-        const bumpR = 6 + (i % 2);
-        const bGrad = ctx.createRadialGradient(bx - 1, by - 1, 0, bx, by, bumpR);
-        bGrad.addColorStop(0, 'rgba(255,200,200,0.15)');
-        bGrad.addColorStop(0.5, 'rgba(255,180,180,0.05)');
-        bGrad.addColorStop(1, 'rgba(0,0,0,0.03)');
-        ctx.fillStyle = bGrad;
-        ctx.beginPath();
-        ctx.ellipse(bx, by, bumpR, bumpR * 0.7, a, 0, Math.PI * 2);
-        ctx.fill();
-    }
-
-    // Inner cushion - soft plush with depth
-    const cushOuter = ctx.createRadialGradient(cx - 5, cy - 4, 0, cx, cy, w / 2.5);
-    cushOuter.addColorStop(0, '#FFE8EA');
-    cushOuter.addColorStop(0.3, '#FFCDD2');
-    cushOuter.addColorStop(0.7, '#EF9A9A');
-    cushOuter.addColorStop(1, '#E08080');
-    ctx.fillStyle = cushOuter;
-    ctx.beginPath();
-    ctx.ellipse(cx, cy, w / 2 - 11, h / 2 - 7, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Cushion wrinkle/indent (where pet sleeps)
-    ctx.strokeStyle = 'rgba(180, 100, 100, 0.1)';
-    ctx.lineWidth = 0.5;
-    ctx.beginPath();
-    ctx.ellipse(cx + 2, cy + 1, w / 5, h / 6, 0.2, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.ellipse(cx - 3, cy, w / 6, h / 7, -0.3, 0, Math.PI * 2);
-    ctx.stroke();
-
-    // Pet hair detail (tiny lines)
-    ctx.save();
-    ctx.globalAlpha = 0.06;
-    ctx.strokeStyle = '#8B6060';
-    ctx.lineWidth = 0.3;
-    const hairs = [[cx-8,cy-2,cx-5,cy+1],[cx+6,cy-1,cx+3,cy+2],[cx-2,cy+3,cx+1,cy+5],[cx+10,cy,cx+7,cy+2]];
-    for (const [hx1,hy1,hx2,hy2] of hairs) {
-        ctx.beginPath();
-        ctx.moveTo(hx1, hy1);
-        ctx.quadraticCurveTo((hx1+hx2)/2, (hy1+hy2)/2 - 1, hx2, hy2);
-        ctx.stroke();
-    }
-    ctx.restore();
-
-    // Stitching detail around bolster
-    ctx.strokeStyle = 'rgba(160, 60, 60, 0.15)';
-    ctx.lineWidth = 0.5;
-    ctx.setLineDash([2, 2.5]);
-    ctx.beginPath();
-    ctx.ellipse(cx, cy, w / 2 - 7, h / 2 - 4, 0, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    // Tag detail (little tag sticking out)
-    ctx.fillStyle = '#F5F5F5';
-    ctx.fillRect(cx + w/2 - 14, cy + 2, 4, 6);
-    ctx.fillStyle = 'rgba(0,0,0,0.1)';
-    ctx.fillRect(cx + w/2 - 13, cy + 4, 2, 2);
-
-    // Specular highlight
-    const specGrad = ctx.createRadialGradient(cx - 8, cy - 3, 0, cx - 6, cy - 2, 10);
-    specGrad.addColorStop(0, 'rgba(255,255,255,0.15)');
-    specGrad.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.fillStyle = specGrad;
-    ctx.beginPath();
-    ctx.ellipse(cx - 7, cy - 3, 10, 5, -0.3, 0, Math.PI * 2);
-    ctx.fill();
-}
-
-function drawRoomba() {
-    // Smooth interpolation toward target position
-    const targetX = roomba.col * TILE + TILE / 2;
-    const targetY = roomba.row * TILE + TILE / 2;
-    const lerp = 0.3; // smoothing factor (0=no movement, 1=instant snap)
-    roomba.drawX += (targetX - roomba.drawX) * lerp;
-    roomba.drawY += (targetY - roomba.drawY) * lerp;
-    // Snap if very close to avoid infinite creep
-    if (Math.abs(targetX - roomba.drawX) < 0.5) roomba.drawX = targetX;
-    if (Math.abs(targetY - roomba.drawY) < 0.5) roomba.drawY = targetY;
-
-    const x = roomba.drawX;
-    const y = roomba.drawY;
-    const r = 20;
-    const dirAngles = { up: -Math.PI / 2, down: Math.PI / 2, left: Math.PI, right: 0 };
-    const angle = dirAngles[roomba.dir];
-
-    ctx.save();
-    ctx.translate(x, y);
-
-    // Ground shadow (soft ellipse)
-    ctx.fillStyle = 'rgba(0,0,0,0.25)';
-    ctx.beginPath();
-    ctx.ellipse(1, 3, r + 1, r * 0.75, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Bump flash glow
-    if (bumpFlash > 0) {
-        ctx.shadowColor = '#FF5252';
-        ctx.shadowBlur = 25;
-    }
-
-    // Main body - realistic dark plastic with multi-stop gradient
-    const bodyGrad = ctx.createRadialGradient(-5, -5, 0, 0, 0, r);
-    bodyGrad.addColorStop(0, '#505050');
-    bodyGrad.addColorStop(0.3, '#404040');
-    bodyGrad.addColorStop(0.7, '#2D2D2D');
-    bodyGrad.addColorStop(1, '#1A1A1A');
-    ctx.fillStyle = bodyGrad;
-    ctx.beginPath();
-    ctx.arc(0, 0, r, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.shadowBlur = 0;
-
-    // Outer bumper ring - subtle metallic
-    const bumperGrad = ctx.createLinearGradient(-r, -r, r, r);
-    bumperGrad.addColorStop(0, '#3A3A3A');
-    bumperGrad.addColorStop(0.5, '#2A2A2A');
-    bumperGrad.addColorStop(1, '#1A1A1A');
-    ctx.strokeStyle = bumperGrad;
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.arc(0, 0, r, 0, Math.PI * 2);
-    ctx.stroke();
-
-    // Bumper sensor strip (front half) - rubber look
-    ctx.strokeStyle = '#4A4A4A';
-    ctx.lineWidth = 3.5;
-    ctx.beginPath();
-    ctx.arc(0, 0, r - 0.5, angle - Math.PI * 0.55, angle + Math.PI * 0.55);
-    ctx.stroke();
-    // IR sensor windows on bumper
-    for (let i = -2; i <= 2; i++) {
-        const sAngle = angle + i * 0.22;
-        const sx = Math.cos(sAngle) * (r - 1);
-        const sy = Math.sin(sAngle) * (r - 1);
-        ctx.fillStyle = 'rgba(20,20,20,0.6)';
-        ctx.beginPath();
-        ctx.arc(sx, sy, 1.2, 0, Math.PI * 2);
-        ctx.fill();
-    }
-
-    // Top plate accent ring - teal (iRobot style)
-    const accentGrad = ctx.createLinearGradient(-r, 0, r, 0);
-    accentGrad.addColorStop(0, '#147A6D');
-    accentGrad.addColorStop(0.5, '#1A9A8A');
-    accentGrad.addColorStop(1, '#147A6D');
-    ctx.strokeStyle = accentGrad;
-    ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    ctx.arc(0, 0, r - 6, 0, Math.PI * 2);
-    ctx.stroke();
-
-    // Inner plate - slightly lighter
-    const innerGrad = ctx.createRadialGradient(-3, -3, 0, 0, 0, r - 7);
-    innerGrad.addColorStop(0, '#3D3D3D');
-    innerGrad.addColorStop(1, '#2A2A2A');
-    ctx.fillStyle = innerGrad;
-    ctx.beginPath();
-    ctx.arc(0, 0, r - 7, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Direction indicator - front brush opening
-    ctx.fillStyle = '#1A8A7D';
-    ctx.beginPath();
-    ctx.arc(0, 0, r - 7, angle - 0.5, angle + 0.5);
-    ctx.lineTo(Math.cos(angle) * 3, Math.sin(angle) * 3);
-    ctx.closePath();
-    ctx.fill();
-
-    // Spinning side brush (single multi-arm brush at front-right)
-    ctx.save();
-    ctx.rotate(angle);
-    const brushAngle = roombaWheelAngle;
-    // Side brush (3-arm spinner)
-    ctx.save();
-    ctx.translate(r - 5, 8);
-    ctx.rotate(brushAngle * 1.5);
-    ctx.strokeStyle = 'rgba(255,255,255,0.25)';
-    ctx.lineWidth = 1;
-    for (let a = 0; a < 3; a++) {
-        const ba = a * Math.PI * 2 / 3;
-        ctx.beginPath();
-        ctx.moveTo(0, 0);
-        ctx.lineTo(Math.cos(ba) * 6, Math.sin(ba) * 6);
-        ctx.stroke();
-    }
-    ctx.fillStyle = '#555';
-    ctx.beginPath();
-    ctx.arc(0, 0, 1.5, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-
-    // Roller brushes (two parallel lines under the body at front)
-    ctx.save();
-    ctx.translate(r - 10, 0);
-    ctx.strokeStyle = '#666';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(0, -5);
-    ctx.lineTo(0, 5);
-    ctx.stroke();
-    ctx.strokeStyle = '#777';
-    ctx.beginPath();
-    ctx.moveTo(-3, -5);
-    ctx.lineTo(-3, 5);
-    ctx.stroke();
-    ctx.restore();
-    ctx.restore();
-
-    // Center CLEAN button with glow
-    ctx.save();
-    if (roomba.battery > 20) {
-        ctx.shadowColor = '#4CAF50';
-        ctx.shadowBlur = 6;
-    } else {
-        ctx.shadowColor = '#F44336';
-        ctx.shadowBlur = 6;
-    }
-    const btnGrad = ctx.createRadialGradient(0, -1, 0, 0, 0, 6);
-    if (roomba.battery > 20) {
-        btnGrad.addColorStop(0, '#5CBF60');
-        btnGrad.addColorStop(0.6, '#4CAF50');
-        btnGrad.addColorStop(1, '#2E7D32');
-    } else {
-        btnGrad.addColorStop(0, '#FF5252');
-        btnGrad.addColorStop(0.6, '#F44336');
-        btnGrad.addColorStop(1, '#C62828');
-    }
-    ctx.fillStyle = btnGrad;
-    ctx.beginPath();
-    ctx.arc(0, 0, 5, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = '#111';
-    ctx.lineWidth = 0.8;
-    ctx.stroke();
-    ctx.restore();
-
-    // "CLEAN" text on button (tiny)
-    ctx.fillStyle = 'rgba(255,255,255,0.6)';
-    ctx.font = 'bold 3.5px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('CLEAN', 0, 0);
-
-    // Specular highlight - realistic plastic shine
-    const specGrad = ctx.createRadialGradient(-5, -7, 0, -4, -6, 8);
-    specGrad.addColorStop(0, 'rgba(255,255,255,0.22)');
-    specGrad.addColorStop(0.5, 'rgba(255,255,255,0.06)');
-    specGrad.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.fillStyle = specGrad;
-    ctx.beginPath();
-    ctx.ellipse(-5, -7, 8, 4, -0.4, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Side wheels - rubber treads
-    ctx.save();
-    ctx.rotate(angle + Math.PI / 2);
-    // Left wheel
-    const wheelGrad = ctx.createLinearGradient(-4, r - 6, 4, r - 6);
-    wheelGrad.addColorStop(0, '#222');
-    wheelGrad.addColorStop(0.3, '#333');
-    wheelGrad.addColorStop(0.7, '#333');
-    wheelGrad.addColorStop(1, '#1A1A1A');
-    ctx.fillStyle = wheelGrad;
-    roundRect(ctx, -4, r - 6, 8, 5, 2);
-    ctx.fill();
-    // Right wheel
-    roundRect(ctx, -4, -r + 1, 8, 5, 2);
-    ctx.fill();
-    // Tread lines
-    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
-    ctx.lineWidth = 0.5;
-    for (let t = 0; t < 3; t++) {
-        ctx.beginPath();
-        ctx.moveTo(-3 + t * 3, r - 5);
-        ctx.lineTo(-3 + t * 3, r - 2);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(-3 + t * 3, -r + 2);
-        ctx.lineTo(-3 + t * 3, -r + 5);
-        ctx.stroke();
-    }
-    ctx.restore();
-
-    // Front caster wheel
-    ctx.save();
-    ctx.rotate(angle);
-    ctx.fillStyle = '#222';
-    ctx.beginPath();
-    ctx.arc(r - 3, 0, 2.5, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-
-    ctx.restore();
-}
-
-function drawCleanAnimations() {
-    for (let i = cleanAnimations.length - 1; i >= 0; i--) {
-        const anim = cleanAnimations[i];
-        anim.progress += 0.035;
-        if (anim.progress >= 1) {
-            cleanAnimations.splice(i, 1);
-            continue;
-        }
-        const x = anim.col * TILE + TILE / 2;
-        const y = anim.row * TILE + TILE / 2;
-        const alpha = 1 - anim.progress;
-
-        ctx.save();
-        ctx.globalAlpha = alpha;
-
-        // Expanding clean ring
-        ctx.strokeStyle = `rgba(180, 240, 200, ${alpha * 0.4})`;
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.arc(x, y, 4 + anim.progress * 18, 0, Math.PI * 2);
-        ctx.stroke();
-
-        // Sparkle stars (more, with varied sizes)
-        for (let p = 0; p < 7; p++) {
-            const a = (p / 7) * Math.PI * 2 + anim.progress * 4;
-            const dist = 5 + anim.progress * 18;
-            const px = x + Math.cos(a) * dist;
-            const py = y + Math.sin(a) * dist;
-            const size = (1.5 + (p % 3) * 0.5) * (1 - anim.progress);
-            // 4-point star with glow
-            ctx.fillStyle = p % 2 === 0 ? '#FFF' : 'rgba(180, 255, 220, 0.9)';
-            ctx.beginPath();
-            ctx.moveTo(px, py - size);
-            ctx.lineTo(px + size * 0.3, py);
-            ctx.lineTo(px, py + size);
-            ctx.lineTo(px - size * 0.3, py);
-            ctx.closePath();
-            ctx.fill();
-            ctx.beginPath();
-            ctx.moveTo(px - size, py);
-            ctx.lineTo(px, py + size * 0.3);
-            ctx.lineTo(px + size, py);
-            ctx.lineTo(px, py - size * 0.3);
-            ctx.closePath();
-            ctx.fill();
-        }
-        ctx.restore();
-    }
-}
+// A key released while another window has focus never sends keyup; don't leave the Roomba driving.
+window.addEventListener('blur', () => {
+    stopHold();
+    keysDown.clear();
+});
 
 // === NPC PAR REPLAY ===
 function startParReplay() {
@@ -2037,15 +504,16 @@ function startParReplay() {
     npcReplay.wheelAngle = 0;
     npcReplay.drawX = parPath[0].col * TILE + TILE / 2;
     npcReplay.drawY = parPath[0].row * TILE + TILE / 2;
+    npcReplay.angle = FP_ANGLE_MAP.up;
 }
 
 function updateNpcReplay() {
     if (!npcReplay.active || gameState !== 'PAR_REPLAY') return;
 
-    npcReplay.timer++;
-    // Step every N frames (NPC_STEP_INTERVAL ms / ~16.6ms per frame)
-    const framesPerStep = Math.max(1, Math.round(NPC_STEP_INTERVAL / 16.6));
-    if (npcReplay.timer % framesPerStep !== 0) return;
+    // Step every NPC_STEP_INTERVAL ms of real time, whatever the display's refresh rate
+    npcReplay.timer += dtMs;
+    if (npcReplay.timer < NPC_STEP_INTERVAL) return;
+    npcReplay.timer -= NPC_STEP_INTERVAL;
 
     npcReplay.stepIndex++;
     if (npcReplay.stepIndex >= parPath.length) {
@@ -2087,279 +555,14 @@ function updateNpcReplay() {
     }
 }
 
-function drawNpcGrid() {
-    // Draw the NPC's version of the grid (showing its cleaning progress)
-    for (let r = 0; r < ROWS; r++) {
-        for (let c = 0; c < COLS; c++) {
-            const x = c * TILE;
-            const y = r * TILE;
-            const cell = npcReplay.grid[r][c];
-
-            if (cell === DIRTY) {
-                ctx.fillStyle = floorPattern || COLORS.dirty;
-            } else if (cell === CLEAN) {
-                ctx.fillStyle = cleanPattern || COLORS.clean;
-            } else if (cell === CHARGER) {
-                drawChargerTile(x, y);
-                continue;
-            } else if (cell === OBSTACLE) {
-                ctx.fillStyle = floorPattern || COLORS.dirty;
-            }
-
-            ctx.fillRect(x, y, TILE, TILE);
-            ctx.strokeStyle = 'rgba(0,0,0,0.06)';
-            ctx.lineWidth = 0.5;
-            ctx.strokeRect(x, y, TILE, TILE);
-        }
-    }
-}
-
-function drawNpcTrail() {
-    for (const t of npcReplay.trailAlpha) {
-        const x = t.col * TILE;
-        const y = t.row * TILE;
-        ctx.save();
-        ctx.globalAlpha = t.alpha * 0.3;
-        // Yellow/dim trail during approach, cyan during cleaning
-        ctx.fillStyle = t.approach ? '#FFB74D' : '#00BFFF';
-        ctx.fillRect(x, y, TILE, TILE);
-        ctx.restore();
-    }
-}
-
-function drawNpcVacuum() {
-    // Smooth interpolation
-    const targetX = npcReplay.col * TILE + TILE / 2;
-    const targetY = npcReplay.row * TILE + TILE / 2;
-    npcReplay.drawX += (targetX - npcReplay.drawX) * 0.25;
-    npcReplay.drawY += (targetY - npcReplay.drawY) * 0.25;
-    if (Math.abs(targetX - npcReplay.drawX) < 0.5) npcReplay.drawX = targetX;
-    if (Math.abs(targetY - npcReplay.drawY) < 0.5) npcReplay.drawY = targetY;
-
-    const x = npcReplay.drawX;
-    const y = npcReplay.drawY;
-    const r = 19;
-    const dirAngles = { up: -Math.PI / 2, down: Math.PI / 2, left: Math.PI, right: 0 };
-    const angle = dirAngles[npcReplay.dir];
-    const pulse = 0.7 + 0.3 * Math.sin(chargerPulse * 0.1);
-
-    ctx.save();
-    ctx.translate(x, y);
-
-    // Outer neon glow (layered for intensity)
-    ctx.shadowColor = '#00BFFF';
-    ctx.shadowBlur = 25 * pulse;
-
-    // Body - dark with blue tint
-    const bodyGrad = ctx.createRadialGradient(-3, -3, 0, 0, 0, r);
-    bodyGrad.addColorStop(0, '#1A2A3A');
-    bodyGrad.addColorStop(0.5, '#0D1B2A');
-    bodyGrad.addColorStop(1, '#050E18');
-    ctx.fillStyle = bodyGrad;
-    ctx.beginPath();
-    ctx.arc(0, 0, r, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Neon outer ring
-    ctx.shadowColor = '#00BFFF';
-    ctx.shadowBlur = 15 * pulse;
-    ctx.strokeStyle = `rgba(0, 191, 255, ${0.7 + 0.3 * pulse})`;
-    ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    ctx.arc(0, 0, r, 0, Math.PI * 2);
-    ctx.stroke();
-
-    // Inner neon ring
-    ctx.strokeStyle = `rgba(0, 230, 255, ${0.5 + 0.3 * pulse})`;
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.arc(0, 0, r - 5, 0, Math.PI * 2);
-    ctx.stroke();
-
-    ctx.shadowBlur = 0;
-
-    // Bumper sensor band (front half) - neon accent
-    ctx.strokeStyle = `rgba(0, 191, 255, 0.4)`;
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.arc(0, 0, r - 1, angle - Math.PI / 2, angle + Math.PI / 2);
-    ctx.stroke();
-
-    // Direction indicator - neon wedge
-    ctx.fillStyle = `rgba(0, 191, 255, ${0.4 + 0.2 * pulse})`;
-    ctx.beginPath();
-    ctx.arc(0, 0, r - 6, angle - 0.4, angle + 0.4);
-    ctx.lineTo(0, 0);
-    ctx.closePath();
-    ctx.fill();
-
-    // Spinning brush rollers
-    ctx.save();
-    ctx.rotate(angle);
-    ctx.strokeStyle = `rgba(0, 230, 255, 0.6)`;
-    ctx.lineWidth = 1.5;
-    const ba = npcReplay.wheelAngle;
-    // Left brush
-    ctx.save();
-    ctx.translate(r - 8, -6);
-    ctx.rotate(ba);
-    ctx.beginPath(); ctx.moveTo(-4, 0); ctx.lineTo(4, 0); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(0, -4); ctx.lineTo(0, 4); ctx.stroke();
-    ctx.restore();
-    // Right brush
-    ctx.save();
-    ctx.translate(r - 8, 6);
-    ctx.rotate(-ba * 1.3);
-    ctx.beginPath(); ctx.moveTo(-4, 0); ctx.lineTo(4, 0); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(0, -4); ctx.lineTo(0, 4); ctx.stroke();
-    ctx.restore();
-    ctx.restore();
-
-    // Center power LED - bright cyan
-    ctx.shadowColor = '#00FFFF';
-    ctx.shadowBlur = 10 * pulse;
-    const ledGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, 5);
-    ledGrad.addColorStop(0, '#00FFFF');
-    ledGrad.addColorStop(0.5, '#00BFFF');
-    ledGrad.addColorStop(1, '#0066CC');
-    ctx.fillStyle = ledGrad;
-    ctx.beginPath();
-    ctx.arc(0, 0, 4, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.shadowBlur = 0;
-
-    // Specular highlight
-    ctx.fillStyle = 'rgba(100, 200, 255, 0.15)';
-    ctx.beginPath();
-    ctx.ellipse(-5, -6, 6, 3, -0.5, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Side wheels
-    ctx.fillStyle = '#0A1520';
-    ctx.save();
-    ctx.rotate(angle + Math.PI / 2);
-    ctx.fillRect(-3, r - 5, 6, 4);
-    ctx.fillRect(-3, -r + 1, 6, 4);
-    ctx.restore();
-
-    ctx.restore();
-}
-
-function drawNpcOverlay() {
-    // Progress bar at top
-    const progress = npcReplay.stepIndex / (parPath.length - 1);
-    const barW = CANVAS_W - 40;
-    const barH = 6;
-    const barX = 20;
-    const barY = 12;
-
-    ctx.save();
-    // Label - show phase
-    const isApproach = npcReplay.stepIndex < parApproachLen;
-    const phaseLabel = isApproach ? 'Approaching start...' : 'Cleaning par route';
-    const cleanStep = isApproach ? 0 : npcReplay.stepIndex - parApproachLen;
-    const cleanTotal = parPath.length - parApproachLen - 1;
-    ctx.fillStyle = isApproach ? 'rgba(255, 183, 77, 0.9)' : 'rgba(0, 191, 255, 0.9)';
-    ctx.font = 'bold 14px Segoe UI, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(`${phaseLabel}  —  Step ${cleanStep} / ${cleanTotal}`, CANVAS_W / 2, barY + barH + 18);
-
-    // Bar background
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
-    roundRect(ctx, barX, barY, barW, barH, 3);
-    ctx.fill();
-    // Bar fill - orange during approach, cyan during cleaning
-    const barColor = isApproach ? '#FFB74D' : '#00BFFF';
-    ctx.fillStyle = barColor;
-    ctx.shadowColor = barColor;
-    ctx.shadowBlur = 8;
-    roundRect(ctx, barX, barY, barW * progress, barH, 3);
-    ctx.fill();
-    ctx.shadowBlur = 0;
-
-    // Skip hint
-    ctx.fillStyle = 'rgba(255,255,255,0.5)';
-    ctx.font = '12px Segoe UI, sans-serif';
-    ctx.fillText('Press SPACE to skip', CANVAS_W / 2, CANVAS_H - 10);
-
-    ctx.restore();
-}
-
-function drawOverlay() {
-    if (gameState === 'LEVEL_COMPLETE') {
-        ctx.save();
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-        ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-
-        ctx.fillStyle = '#4CAF50';
-        ctx.font = 'bold 40px Segoe UI, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText('Level Complete!', CANVAS_W / 2, CANVAS_H / 2 - 40);
-
-        ctx.fillStyle = '#FFF';
-        ctx.font = '20px Segoe UI, sans-serif';
-        ctx.fillText(`Score: ${score}`, CANVAS_W / 2, CANVAS_H / 2 + 10);
-        ctx.fillText(`Moves: ${moves}`, CANVAS_W / 2, CANVAS_H / 2 + 40);
-
-        // Watch par route option
-        ctx.fillStyle = '#00BFFF';
-        ctx.font = '16px Segoe UI, sans-serif';
-        ctx.fillText('Press W to watch the NPC par route', CANVAS_W / 2, CANVAS_H / 2 + 75);
-
-        if (currentLevel < LEVELS.length - 1) {
-            ctx.fillStyle = '#A0C4FF';
-            ctx.font = '18px Segoe UI, sans-serif';
-            ctx.fillText('Press SPACE or click for Next Level', CANVAS_W / 2, CANVAS_H / 2 + 105);
-        } else {
-            ctx.fillStyle = '#FFD600';
-            ctx.font = 'bold 28px Segoe UI, sans-serif';
-            ctx.fillText('You Win! All levels complete!', CANVAS_W / 2, CANVAS_H / 2 + 105);
-            ctx.font = '16px Segoe UI, sans-serif';
-            ctx.fillStyle = '#CCC';
-            ctx.fillText('Press R to play again', CANVAS_W / 2, CANVAS_H / 2 + 135);
-        }
-
-        ctx.restore();
-    } else if (gameState === 'GAME_OVER') {
-        ctx.save();
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-        ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-
-        ctx.fillStyle = '#F44336';
-        ctx.font = 'bold 40px Segoe UI, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText('Out of Battery!', CANVAS_W / 2, CANVAS_H / 2 - 20);
-
-        ctx.fillStyle = '#FFF';
-        ctx.font = '18px Segoe UI, sans-serif';
-        ctx.fillText('Return to the charger next time!', CANVAS_W / 2, CANVAS_H / 2 + 20);
-        ctx.fillText('Press R to restart', CANVAS_W / 2, CANVAS_H / 2 + 50);
-
-        ctx.restore();
-    }
-}
-
-function roundRect(ctx, x, y, w, h, r) {
-    ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.lineTo(x + w - r, y);
-    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-    ctx.lineTo(x + w, y + h - r);
-    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-    ctx.lineTo(x + r, y + h);
-    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-    ctx.lineTo(x, y + r);
-    ctx.quadraticCurveTo(x, y, x + r, y);
-    ctx.closePath();
-}
-
 // === UI UPDATES ===
 function updateUI() {
+    if (!elCleaned) return; // headless (tests) or before init
     elCleaned.textContent = `${cleaned} / ${totalDirty}`;
     elMoves.textContent = moves;
     elParCount.textContent = parMoves;
     elScore.textContent = score;
-    elLevelNum.textContent = currentLevel + 1;
+    elLevelNum.textContent = `${currentLevel + 1} · ${LEVELS[currentLevel].name}`;
 
     const pct = roomba.battery;
     elBatteryFill.style.width = pct + '%';
@@ -2374,544 +577,72 @@ function updateUI() {
         elBatteryFill.style.backgroundColor = '#F44336';
         elBatteryText.style.color = '#F44336';
     }
+    elBatteryFill.classList.toggle('low', pct <= 20);
+    elBatteryText.classList.toggle('low', pct <= 20);
+
+    // How far home is, and whether the battery still covers it
+    const dockDist = chargerDistGrid ? chargerDistGrid[roomba.row][roomba.col] : -1;
+    const cost = LEVELS[currentLevel].batteryCost || 1;
+    if (elDockDist) {
+        elDockDist.textContent = dockDist < 0 ? '--' : dockDist === 0 ? 'here' : `${dockDist} moves`;
+        elDockDist.classList.toggle('warn', dockDist > 0 && pct <= (dockDist + 2) * cost);
+    }
+
+    // Screen-reader status: every ten tiles, and on every state change
+    if (elSrStatus && (cleaned % 10 === 0 || gameState !== 'PLAYING')) {
+        const state = gameState === 'LEVEL_COMPLETE' ? 'Level complete. ' : gameState === 'GAME_OVER' ? 'Out of battery. ' : '';
+        elSrStatus.textContent = `${state}${cleaned} of ${totalDirty} tiles cleaned, battery ${pct} percent, dock ${dockDist} moves away.`;
+    }
 }
 
 // === GAME LOOP ===
-// === FIRST-PERSON RAYCASTER ===
-
-function lerpAngle(from, to, t) {
-    let diff = to - from;
-    while (diff > Math.PI) diff -= 2 * Math.PI;
-    while (diff < -Math.PI) diff += 2 * Math.PI;
-    return from + diff * t;
+// Convert a per-60fps-frame ease factor into one for the real elapsed time
+function easeK(k) {
+    return 1 - Math.pow(1 - k, dtFrames);
 }
 
-// Wall/obstacle colors for raycaster (base color, darker shade for N/S faces)
-const FP_COLORS = {
-    wall:   { light: [120, 90, 90],  dark: [90, 68, 68] },
-    couch:  { light: [110, 76, 65],  dark: [82, 57, 49] },
-    table:  { light: [160, 128, 100], dark: [120, 96, 75] },
-    chair:  { light: [150, 150, 150], dark: [112, 112, 112] },
-    plant:  { light: [67, 160, 71],  dark: [50, 120, 53] },
-    petbed: { light: [229, 115, 115], dark: [172, 86, 86] },
-};
-
-function renderFirstPerson() {
-    // Update smooth position (normally done in drawRoomba, which is skipped in FP mode)
-    const targetX = roomba.col * TILE + TILE / 2;
-    const targetY = roomba.row * TILE + TILE / 2;
-    roomba.drawX += (targetX - roomba.drawX) * 0.3;
-    roomba.drawY += (targetY - roomba.drawY) * 0.3;
-    if (Math.abs(targetX - roomba.drawX) < 0.5) roomba.drawX = targetX;
-    if (Math.abs(targetY - roomba.drawY) < 0.5) roomba.drawY = targetY;
-
-    // Smooth camera rotation
-    fpAngle = lerpAngle(fpAngle, fpTargetAngle, 0.22);
-
-    // Camera position (use smooth draw position)
-    const camX = roomba.drawX / TILE;
-    const camY = roomba.drawY / TILE;
-
-    // Precompute direction vectors
-    const dirX = Math.cos(fpAngle);
-    const dirY = Math.sin(fpAngle);
-    const planeX = Math.cos(fpAngle + Math.PI / 2) * Math.tan(FP_FOV / 2);
-    const planeY = Math.sin(fpAngle + Math.PI / 2) * Math.tan(FP_FOV / 2);
-
-    // Draw ceiling gradient
-    const ceilGrad = ctx.createLinearGradient(0, 0, 0, CANVAS_H / 2);
-    ceilGrad.addColorStop(0, '#3A3A4A');
-    ceilGrad.addColorStop(0.5, '#4A4A58');
-    ceilGrad.addColorStop(1, '#5A5A68');
-    ctx.fillStyle = ceilGrad;
-    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H / 2);
-
-    // Draw floor base gradient
-    const floorGrad = ctx.createLinearGradient(0, CANVAS_H / 2, 0, CANVAS_H);
-    floorGrad.addColorStop(0, '#8A7A60');
-    floorGrad.addColorStop(0.3, '#B0986A');
-    floorGrad.addColorStop(1, '#D4BC96');
-    ctx.fillStyle = floorGrad;
-    ctx.fillRect(0, CANVAS_H / 2, CANVAS_W, CANVAS_H / 2);
-
-    // Z-buffer for minimap (optional, not strictly needed)
-    const stripWidth = 2; // render every 2 pixels for performance
-    const numRays = Math.ceil(CANVAS_W / stripWidth);
-
-    for (let i = 0; i < numRays; i++) {
-        const screenX = i * stripWidth;
-        // Camera space: -1 to +1
-        const cameraX = 2 * i / numRays - 1;
-        const rayDirX = dirX + planeX * cameraX;
-        const rayDirY = dirY + planeY * cameraX;
-
-        // DDA setup
-        let mapX = Math.floor(camX);
-        let mapY = Math.floor(camY);
-        const deltaDistX = Math.abs(1 / rayDirX) || 1e10;
-        const deltaDistY = Math.abs(1 / rayDirY) || 1e10;
-        let stepX, stepY, sideDistX, sideDistY;
-
-        if (rayDirX < 0) {
-            stepX = -1;
-            sideDistX = (camX - mapX) * deltaDistX;
-        } else {
-            stepX = 1;
-            sideDistX = (mapX + 1 - camX) * deltaDistX;
-        }
-        if (rayDirY < 0) {
-            stepY = -1;
-            sideDistY = (camY - mapY) * deltaDistY;
-        } else {
-            stepY = 1;
-            sideDistY = (mapY + 1 - camY) * deltaDistY;
-        }
-
-        // DDA march
-        let hit = false;
-        let side = 0; // 0 = E/W face, 1 = N/S face
-        let maxSteps = 30;
-        while (!hit && maxSteps-- > 0) {
-            if (sideDistX < sideDistY) {
-                sideDistX += deltaDistX;
-                mapX += stepX;
-                side = 0;
-            } else {
-                sideDistY += deltaDistY;
-                mapY += stepY;
-                side = 1;
-            }
-            if (mapX < 0 || mapX >= COLS || mapY < 0 || mapY >= ROWS) {
-                hit = true; // boundary wall
-                break;
-            }
-            if (grid[mapY][mapX] === OBSTACLE) {
-                hit = true;
-            }
-        }
-
-        // Calculate perpendicular distance (fixes fisheye)
-        let perpDist;
-        if (side === 0) {
-            perpDist = (mapX - camX + (1 - stepX) / 2) / rayDirX;
-        } else {
-            perpDist = (mapY - camY + (1 - stepY) / 2) / rayDirY;
-        }
-        perpDist = Math.max(perpDist, 0.01);
-
-        // Determine obstacle type and height
-        let obsType = 'wall';
-        if (mapX >= 0 && mapX < COLS && mapY >= 0 && mapY < ROWS && obstacleTypeMap[mapY][mapX]) {
-            obsType = obstacleTypeMap[mapY][mapX];
-        }
-        const heightFactor = FP_HEIGHT_FACTORS[obsType] || 1.0;
-
-        // Wall strip dimensions
-        const fullWallH = CANVAS_H / perpDist;
-        const wallH = fullWallH * heightFactor;
-        const wallTop = Math.floor(CANVAS_H / 2 - wallH / 2);
-        const wallBot = Math.ceil(CANVAS_H / 2 + wallH / 2);
-
-        // Wall color with distance fog and side shading
-        const colors = FP_COLORS[obsType] || FP_COLORS.wall;
-        const baseColor = side === 1 ? colors.dark : colors.light;
-        const fog = Math.min(1, 0.15 + perpDist * 0.12);
-        const fogR = Math.floor(baseColor[0] * (1 - fog) + 40 * fog);
-        const fogG = Math.floor(baseColor[1] * (1 - fog) + 40 * fog);
-        const fogB = Math.floor(baseColor[2] * (1 - fog) + 50 * fog);
-        ctx.fillStyle = `rgb(${fogR},${fogG},${fogB})`;
-        ctx.fillRect(screenX, wallTop, stripWidth, wallBot - wallTop);
-
-        // Wall edge highlight (top edge for 3D effect)
-        if (wallH > 10) {
-            ctx.fillStyle = `rgba(255,255,255,${0.08 * (1 - fog)})`;
-            ctx.fillRect(screenX, wallTop, stripWidth, 2);
-            ctx.fillStyle = `rgba(0,0,0,${0.1 * (1 - fog)})`;
-            ctx.fillRect(screenX, wallBot - 2, stripWidth, 2);
-        }
-
-        // For shorter obstacles, draw the top face
-        if (heightFactor < 1.0) {
-            const topShade = Math.floor(baseColor[0] * 1.15 * (1 - fog) + 50 * fog);
-            const topG = Math.floor(baseColor[1] * 1.15 * (1 - fog) + 50 * fog);
-            const topB = Math.floor(baseColor[2] * 1.15 * (1 - fog) + 55 * fog);
-            ctx.fillStyle = `rgb(${Math.min(255, topShade)},${Math.min(255, topG)},${Math.min(255, topB)})`;
-            // Top face: from where full-height wall top would be, down to actual wall top
-            const fullTop = Math.floor(CANVAS_H / 2 - fullWallH / 2);
-            if (wallTop > fullTop) {
-                ctx.fillRect(screenX, wallTop - 3, stripWidth, 3);
-            }
-        }
-
-        // Floor casting (for each pixel row below the wall)
-        for (let y = Math.max(wallBot, CANVAS_H / 2); y < CANVAS_H; y += 2) {
-            const rowDist = (CANVAS_H * 0.5) / (y - CANVAS_H / 2);
-            const floorX = camX + rayDirX * rowDist;
-            const floorY = camY + rayDirY * rowDist;
-            const tileCol = Math.floor(floorX);
-            const tileRow = Math.floor(floorY);
-
-            if (tileCol < 0 || tileCol >= COLS || tileRow < 0 || tileRow >= ROWS) continue;
-
-            const cell = grid[tileRow][tileCol];
-            const fFog = Math.min(0.7, rowDist * 0.06);
-
-            let fr, fg, fb;
-            if (cell === CLEAN) {
-                fr = 184; fg = 230; fb = 200; // green clean
-            } else if (cell === CHARGER) {
-                // Pulsing blue
-                const pulse = 0.7 + 0.3 * Math.sin(chargerPulse * 0.05);
-                fr = 100 * pulse; fg = 160 * pulse; fb = 255 * pulse;
-            } else {
-                fr = 212; fg = 188; fb = 150; // tan dirty
-                // Subtle checkerboard for dirty tiles
-                if ((tileCol + tileRow) % 2 === 0) { fr -= 8; fg -= 6; fb -= 5; }
-            }
-
-            // Apply fog
-            fr = Math.floor(fr * (1 - fFog) + 50 * fFog);
-            fg = Math.floor(fg * (1 - fFog) + 48 * fFog);
-            fb = Math.floor(fb * (1 - fFog) + 55 * fFog);
-
-            ctx.fillStyle = `rgb(${fr},${fg},${fb})`;
-            ctx.fillRect(screenX, y, stripWidth, 2);
+function render(timestamp) {
+    try {
+        renderFrame(timestamp);
+    } catch (e) {
+        // One bad frame must not freeze the game; report it once and keep going
+        if (!render.reported) {
+            render.reported = true;
+            console.error('render', e);
         }
     }
-
-    // Charger glow when on charger
-    if (grid[roomba.row][roomba.col] === CHARGER) {
-        ctx.save();
-        ctx.globalAlpha = 0.1 + 0.05 * Math.sin(chargerPulse * 0.06);
-        ctx.fillStyle = '#4080FF';
-        ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-        ctx.restore();
-    }
-
-    // Bump flash (red edges)
-    if (bumpFlash > 0) {
-        ctx.save();
-        ctx.globalAlpha = bumpFlash / 10 * 0.3;
-        const bfGrad = ctx.createRadialGradient(CANVAS_W/2, CANVAS_H/2, CANVAS_W * 0.3, CANVAS_W/2, CANVAS_H/2, CANVAS_W * 0.7);
-        bfGrad.addColorStop(0, 'rgba(255,0,0,0)');
-        bfGrad.addColorStop(1, 'rgba(255,50,50,0.6)');
-        ctx.fillStyle = bfGrad;
-        ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-        ctx.restore();
-    }
-
-    // Crosshair
-    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(CANVAS_W / 2 - 8, CANVAS_H / 2);
-    ctx.lineTo(CANVAS_W / 2 + 8, CANVAS_H / 2);
-    ctx.moveTo(CANVAS_W / 2, CANVAS_H / 2 - 8);
-    ctx.lineTo(CANVAS_W / 2, CANVAS_H / 2 + 8);
-    ctx.stroke();
-
-    // Direction indicator text
-    const dirLabels = { up: 'N', down: 'S', left: 'W', right: 'E' };
-    ctx.fillStyle = 'rgba(255,255,255,0.4)';
-    ctx.font = 'bold 14px Segoe UI, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(dirLabels[roomba.dir] || '', CANVAS_W / 2, 20);
-
-    // Draw minimap
-    drawFpMinimap();
+    requestAnimationFrame(render);
 }
 
-function drawFpMinimap() {
-    const mapScale = 8;
-    const mapW = COLS * mapScale;
-    const mapH = ROWS * mapScale;
-    const mapX = 10;
-    const mapY = CANVAS_H - mapH - 10;
+function renderFrame(timestamp) {
+    if (!lastFrameTime) lastFrameTime = timestamp;
+    dtMs = Math.min(100, Math.max(0, timestamp - lastFrameTime)); // clamp so a hidden tab doesn't jump
+    lastFrameTime = timestamp;
+    dtFrames = dtMs / FRAME_MS;
 
-    ctx.save();
-    ctx.globalAlpha = 0.7;
-
-    // Background
-    ctx.fillStyle = 'rgba(0,0,0,0.5)';
-    roundRect(ctx, mapX - 2, mapY - 2, mapW + 4, mapH + 4, 4);
-    ctx.fill();
-
-    // Tiles
-    for (let r = 0; r < ROWS; r++) {
-        for (let c = 0; c < COLS; c++) {
-            const cell = grid[r][c];
-            const tx = mapX + c * mapScale;
-            const ty = mapY + r * mapScale;
-            if (cell === OBSTACLE) {
-                ctx.fillStyle = '#666';
-            } else if (cell === CLEAN) {
-                ctx.fillStyle = '#6CB880';
-            } else if (cell === CHARGER) {
-                ctx.fillStyle = '#6090DD';
-            } else {
-                ctx.fillStyle = '#C4A878';
-            }
-            ctx.fillRect(tx, ty, mapScale - 0.5, mapScale - 0.5);
-        }
-    }
-
-    // Player position and direction
-    const px = mapX + (roomba.drawX / TILE) * mapScale;
-    const py = mapY + (roomba.drawY / TILE) * mapScale;
-
-    // FOV cone
-    ctx.fillStyle = 'rgba(255,255,100,0.15)';
-    ctx.beginPath();
-    ctx.moveTo(px, py);
-    const coneLen = 25;
-    ctx.lineTo(px + Math.cos(fpAngle - FP_FOV / 2) * coneLen, py + Math.sin(fpAngle - FP_FOV / 2) * coneLen);
-    ctx.lineTo(px + Math.cos(fpAngle + FP_FOV / 2) * coneLen, py + Math.sin(fpAngle + FP_FOV / 2) * coneLen);
-    ctx.closePath();
-    ctx.fill();
-
-    // Player dot
-    ctx.fillStyle = '#00FF88';
-    ctx.beginPath();
-    ctx.arc(px, py, 3, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Direction line
-    ctx.strokeStyle = '#00FF88';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(px, py);
-    ctx.lineTo(px + Math.cos(fpAngle) * 10, py + Math.sin(fpAngle) * 10);
-    ctx.stroke();
-
-    ctx.restore();
-}
-
-// === AMBIENT EFFECTS ===
-
-// Floating dust motes
-const dustMotes = [];
-for (let i = 0; i < 30; i++) {
-    dustMotes.push({
-        x: Math.random() * CANVAS_W,
-        y: Math.random() * CANVAS_H,
-        size: 0.8 + Math.random() * 2.0,
-        speed: 0.06 + Math.random() * 0.18,
-        drift: Math.random() * Math.PI * 2,
-        alpha: 0.2 + Math.random() * 0.3,
-        wobble: Math.random() * 0.5 + 0.3,
-    });
-}
-
-function drawDustMotes() {
-    for (const m of dustMotes) {
-        m.y -= m.speed;
-        m.x += Math.sin(m.drift + chargerPulse * 0.006) * m.wobble;
-        if (m.y < -5) { m.y = CANVAS_H + 5; m.x = Math.random() * CANVAS_W; }
-        if (m.x < -5) m.x = CANVAS_W + 5;
-        if (m.x > CANVAS_W + 5) m.x = -5;
-
-        const flicker = 0.6 + 0.4 * Math.sin(chargerPulse * 0.015 + m.drift);
-        ctx.save();
-        ctx.globalAlpha = m.alpha * flicker;
-        // Soft glowing dust particle
-        const dg = ctx.createRadialGradient(m.x, m.y, 0, m.x, m.y, m.size * 2);
-        dg.addColorStop(0, 'rgba(255, 250, 230, 0.9)');
-        dg.addColorStop(0.5, 'rgba(255, 245, 210, 0.3)');
-        dg.addColorStop(1, 'rgba(255, 240, 200, 0)');
-        ctx.fillStyle = dg;
-        ctx.beginPath();
-        ctx.arc(m.x, m.y, m.size * 2, 0, Math.PI * 2);
-        ctx.fill();
-        // Bright core
-        ctx.fillStyle = 'rgba(255, 252, 240, 0.8)';
-        ctx.beginPath();
-        ctx.arc(m.x, m.y, m.size * 0.5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-    }
-}
-
-function drawBaseboards() {
-    const bH = 8;
-
-    // Bottom baseboard - wood molding
-    let baseGrad = ctx.createLinearGradient(0, CANVAS_H - bH, 0, CANVAS_H);
-    baseGrad.addColorStop(0, '#D4B896');
-    baseGrad.addColorStop(0.15, '#C4A882');
-    baseGrad.addColorStop(0.5, '#B09068');
-    baseGrad.addColorStop(0.85, '#9A7A58');
-    baseGrad.addColorStop(1, '#8A6A48');
-    ctx.fillStyle = baseGrad;
-    ctx.fillRect(0, CANVAS_H - bH, CANVAS_W, bH);
-    // Top edge highlight (light catching the molding)
-    ctx.fillStyle = 'rgba(255,255,255,0.2)';
-    ctx.fillRect(0, CANVAS_H - bH, CANVAS_W, 1.5);
-    // Mid groove
-    ctx.fillStyle = 'rgba(0,0,0,0.1)';
-    ctx.fillRect(0, CANVAS_H - bH + 3, CANVAS_W, 1);
-    // Bottom shadow
-    ctx.fillStyle = 'rgba(0,0,0,0.15)';
-    ctx.fillRect(0, CANVAS_H - 1, CANVAS_W, 1);
-
-    // Top baseboard
-    baseGrad = ctx.createLinearGradient(0, 0, 0, bH);
-    baseGrad.addColorStop(0, '#8A6A48');
-    baseGrad.addColorStop(0.15, '#9A7A58');
-    baseGrad.addColorStop(0.5, '#B09068');
-    baseGrad.addColorStop(0.85, '#C4A882');
-    baseGrad.addColorStop(1, '#D4B896');
-    ctx.fillStyle = baseGrad;
-    ctx.fillRect(0, 0, CANVAS_W, bH);
-    // Bottom highlight
-    ctx.fillStyle = 'rgba(255,255,255,0.15)';
-    ctx.fillRect(0, bH - 1.5, CANVAS_W, 1.5);
-    // Groove
-    ctx.fillStyle = 'rgba(0,0,0,0.1)';
-    ctx.fillRect(0, bH - 4, CANVAS_W, 1);
-    // Top shadow line
-    ctx.fillStyle = 'rgba(0,0,0,0.12)';
-    ctx.fillRect(0, 0, CANVAS_W, 1);
-
-    // Left baseboard
-    let sideGrad = ctx.createLinearGradient(0, 0, bH, 0);
-    sideGrad.addColorStop(0, '#8A6A48');
-    sideGrad.addColorStop(0.3, '#9A7A58');
-    sideGrad.addColorStop(0.6, '#B09068');
-    sideGrad.addColorStop(1, '#C4A882');
-    ctx.fillStyle = sideGrad;
-    ctx.fillRect(0, 0, bH, CANVAS_H);
-    ctx.fillStyle = 'rgba(255,255,255,0.12)';
-    ctx.fillRect(bH - 1.5, 0, 1.5, CANVAS_H);
-    ctx.fillStyle = 'rgba(0,0,0,0.08)';
-    ctx.fillRect(bH - 4, 0, 1, CANVAS_H);
-
-    // Right baseboard
-    sideGrad = ctx.createLinearGradient(CANVAS_W - bH, 0, CANVAS_W, 0);
-    sideGrad.addColorStop(0, '#C4A882');
-    sideGrad.addColorStop(0.4, '#B09068');
-    sideGrad.addColorStop(0.7, '#9A7A58');
-    sideGrad.addColorStop(1, '#8A6A48');
-    ctx.fillStyle = sideGrad;
-    ctx.fillRect(CANVAS_W - bH, 0, bH, CANVAS_H);
-    ctx.fillStyle = 'rgba(255,255,255,0.1)';
-    ctx.fillRect(CANVAS_W - bH, 0, 1.5, CANVAS_H);
-    ctx.fillStyle = 'rgba(0,0,0,0.08)';
-    ctx.fillRect(CANVAS_W - bH + 3, 0, 1, CANVAS_H);
-
-    // Corner shadows where baseboards meet (darker corners)
-    ctx.fillStyle = 'rgba(0,0,0,0.15)';
-    ctx.fillRect(0, 0, bH, bH);
-    ctx.fillRect(CANVAS_W - bH, 0, bH, bH);
-    ctx.fillRect(0, CANVAS_H - bH, bH, bH);
-    ctx.fillRect(CANVAS_W - bH, CANVAS_H - bH, bH, bH);
-}
-
-function drawRoomVignette() {
-    // Corner shadows for depth
-    const cornerSize = 120;
-
-    // Top-left
-    let g = ctx.createRadialGradient(0, 0, 0, 0, 0, cornerSize);
-    g.addColorStop(0, 'rgba(0,0,0,0.12)');
-    g.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, cornerSize, cornerSize);
-
-    // Top-right
-    g = ctx.createRadialGradient(CANVAS_W, 0, 0, CANVAS_W, 0, cornerSize);
-    g.addColorStop(0, 'rgba(0,0,0,0.1)');
-    g.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = g;
-    ctx.fillRect(CANVAS_W - cornerSize, 0, cornerSize, cornerSize);
-
-    // Bottom-left
-    g = ctx.createRadialGradient(0, CANVAS_H, 0, 0, CANVAS_H, cornerSize);
-    g.addColorStop(0, 'rgba(0,0,0,0.1)');
-    g.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = g;
-    ctx.fillRect(0, CANVAS_H - cornerSize, cornerSize, cornerSize);
-
-    // Bottom-right
-    g = ctx.createRadialGradient(CANVAS_W, CANVAS_H, 0, CANVAS_W, CANVAS_H, cornerSize);
-    g.addColorStop(0, 'rgba(0,0,0,0.08)');
-    g.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = g;
-    ctx.fillRect(CANVAS_W - cornerSize, CANVAS_H - cornerSize, cornerSize, cornerSize);
-
-    // Subtle edge darkening along all sides
-    // Top edge
-    g = ctx.createLinearGradient(0, 0, 0, 40);
-    g.addColorStop(0, 'rgba(0,0,0,0.06)');
-    g.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, CANVAS_W, 40);
-
-    // Bottom edge
-    g = ctx.createLinearGradient(0, CANVAS_H, 0, CANVAS_H - 40);
-    g.addColorStop(0, 'rgba(0,0,0,0.06)');
-    g.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = g;
-    ctx.fillRect(0, CANVAS_H - 40, CANVAS_W, 40);
-
-    // Left edge
-    g = ctx.createLinearGradient(0, 0, 40, 0);
-    g.addColorStop(0, 'rgba(0,0,0,0.05)');
-    g.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, 40, CANVAS_H);
-
-    // Right edge
-    g = ctx.createLinearGradient(CANVAS_W, 0, CANVAS_W - 40, 0);
-    g.addColorStop(0, 'rgba(0,0,0,0.05)');
-    g.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = g;
-    ctx.fillRect(CANVAS_W - 40, 0, 40, CANVAS_H);
-}
-
-// Sunlight beam effect from top-right corner (like window light)
-function drawSunlight() {
-    ctx.save();
-
-    // Main warm light patch on floor
-    ctx.globalCompositeOperation = 'overlay';
-    const sunGrad = ctx.createRadialGradient(CANVAS_W - 80, 50, 0, CANVAS_W - 80, 50, 350);
-    sunGrad.addColorStop(0, 'rgba(255, 235, 180, 0.2)');
-    sunGrad.addColorStop(0.3, 'rgba(255, 230, 170, 0.1)');
-    sunGrad.addColorStop(0.6, 'rgba(255, 225, 160, 0.04)');
-    sunGrad.addColorStop(1, 'rgba(255, 220, 150, 0)');
-    ctx.fillStyle = sunGrad;
-    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-
-    // Diagonal light streak (like light through blinds)
-    ctx.globalCompositeOperation = 'screen';
-    ctx.globalAlpha = 0.04;
-    ctx.fillStyle = '#FFF8E0';
-    for (let i = 0; i < 5; i++) {
-        ctx.save();
-        ctx.translate(CANVAS_W - 100 - i * 80, -20);
-        ctx.rotate(0.6);
-        ctx.fillRect(0, 0, 25, CANVAS_H * 1.5);
-        ctx.restore();
-    }
-
-    ctx.restore();
-}
-
-function render() {
     ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+
+    const fpActive = viewMode === 'FP' &&
+        (gameState === 'PLAYING' || gameState === 'LEVEL_COMPLETE' || gameState === 'GAME_OVER');
 
     if (gameState === 'PAR_REPLAY') {
         updateNpcReplay();
-        drawNpcGrid();
-        drawBaseboards();
-        drawObstacles();
-        drawNpcTrail();
-        drawRoomVignette();
-        drawSunlight();
-        drawDustMotes();
-        drawNpcVacuum();
-        drawNpcOverlay();
-    } else if (viewMode === 'FP' && gameState === 'PLAYING') {
+        if (viewMode === 'FP' && gameState === 'PAR_REPLAY') {
+            // Ride along with the ghost
+            renderFirstPerson(fpGhostView());
+        } else {
+            drawNpcGrid();
+            drawBaseboards();
+            drawObstacles();
+            drawNpcTrail();
+            drawRoomVignette();
+            drawSunlight();
+            drawDustMotes();
+            drawNpcVacuum();
+        }
+        if (gameState === 'PAR_REPLAY') drawNpcOverlay();
+        else drawOverlay();
+    } else if (fpActive) {
         renderFirstPerson();
         drawOverlay();
     } else {
@@ -2926,16 +657,32 @@ function render() {
         drawOverlay();
     }
 
-    if (bumpFlash > 0) bumpFlash--;
-    chargerPulse++;
+    // Short fade-in after switching views
+    if (viewFade > 0) {
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, viewFade);
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+        ctx.restore();
+        viewFade -= dtMs / 240;
+    }
 
-    requestAnimationFrame(render);
+    drawBanner();
+    if (helpVisible) drawHelp();
+
+    if (bumpFlash > 0) bumpFlash = Math.max(0, bumpFlash - dtFrames);
+    chargerPulse += dtFrames;
+    if (bannerTimer > 0) bannerTimer -= dtMs;
+    if (typeof audioUpdate === 'function') {
+        try { audioUpdate(timestamp); } catch (e) { console.error('audio', e); }
+    }
 }
 
 // === NEXT LEVEL / RESTART HANDLERS ===
 function nextLevel() {
     if (gameState === 'LEVEL_COMPLETE' && currentLevel < LEVELS.length - 1) {
         currentLevel++;
+        levelStartScore = score;
         initLevel(currentLevel);
     }
 }
@@ -2944,6 +691,12 @@ function nextLevel() {
 document.addEventListener('DOMContentLoaded', () => {
     canvas = document.getElementById('gameCanvas');
     ctx = canvas.getContext('2d');
+
+    // Render at the display's native density so lines and text are crisp on 2x screens
+    canvasDpr = Math.min(window.devicePixelRatio || 1, 3);
+    canvas.width = Math.round(CANVAS_W * canvasDpr);
+    canvas.height = Math.round(CANVAS_H * canvasDpr);
+    ctx.setTransform(canvasDpr, 0, 0, canvasDpr, 0, 0);
 
     createFloorPatterns();
 
@@ -2956,14 +709,30 @@ document.addEventListener('DOMContentLoaded', () => {
     elBtnRestart = document.getElementById('btnRestart');
     elParCount = document.getElementById('parCount');
     elBtnView = document.getElementById('btnViewToggle');
+    elBtnHelp = document.getElementById('btnHelp');
+    elDockDist = document.getElementById('dockDist');
+    elSrStatus = document.getElementById('srStatus');
 
-    // View toggle button
+    // View toggle button (blur afterwards so Space/Enter don't re-trigger it)
     if (elBtnView) {
         elBtnView.addEventListener('click', () => {
-            if (gameState === 'PLAYING') {
-                viewMode = viewMode === 'TD' ? 'FP' : 'TD';
-                elBtnView.textContent = viewMode === 'FP' ? '2D View' : '3D View';
-            }
+            toggleView();
+            elBtnView.blur();
+        });
+    }
+    if (elBtnHelp) {
+        elBtnHelp.addEventListener('click', () => {
+            toggleHelp();
+            elBtnHelp.blur();
+        });
+    }
+    const elBtnMute = document.getElementById('btnMute');
+    if (elBtnMute && typeof audioToggleMute === 'function') {
+        audioLoadMute();
+        audioSetMuted(audio.muted);
+        elBtnMute.addEventListener('click', () => {
+            audioToggleMute();
+            elBtnMute.blur();
         });
     }
 
@@ -2988,16 +757,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Restart button
     elBtnRestart.addEventListener('click', () => {
-        initLevel(currentLevel);
+        restartLevel();
+        elBtnRestart.blur();
     });
 
-    // Canvas click for next level
+    // Canvas click: close help, or go to the next level
     canvas.addEventListener('click', () => {
-        if (gameState === 'LEVEL_COMPLETE') {
+        if (helpVisible) {
+            toggleHelp();
+        } else if (gameState === 'LEVEL_COMPLETE') {
             nextLevel();
         }
     });
 
-    initLevel(0);
-    render();
+    loadProgress();
+    currentLevel = progress.unlocked; // resume at the furthest level reached
+    initLevel(currentLevel);
+    updateViewButtons();
+    requestAnimationFrame(render);
 });

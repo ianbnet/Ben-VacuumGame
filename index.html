@@ -9,7 +9,7 @@
 <body>
     <div id="gameContainer">
         <h1 id="gameTitle">Roomba Vacuum</h1>
-        <canvas id="gameCanvas" width="720" height="576"></canvas>
+        <canvas id="gameCanvas" width="720" height="576" role="img" aria-label="Game board"></canvas>
         <div id="controlPanel">
             <div id="statsPanel">
                 <div class="stat">
@@ -24,14 +24,18 @@
                     <span class="stat-label">Score</span>
                     <span id="scoreDisplay" class="stat-value">0</span>
                 </div>
+                <div class="stat">
+                    <span class="stat-label">Dock</span>
+                    <span id="dockDist" class="stat-value">--</span>
+                </div>
             </div>
             <div id="dpadContainer">
-                <div id="dpad">
-                    <button class="dpad-btn" id="btnUp" data-dir="up">&#9650;</button>
-                    <button class="dpad-btn" id="btnLeft" data-dir="left">&#9664;</button>
-                    <button class="dpad-btn dpad-center" id="btnCenter" disabled></button>
-                    <button class="dpad-btn" id="btnRight" data-dir="right">&#9654;</button>
-                    <button class="dpad-btn" id="btnDown" data-dir="down">&#9660;</button>
+                <div id="dpad" role="group" aria-label="Movement controls">
+                    <button class="dpad-btn" id="btnUp" data-dir="up" aria-label="Up">&#9650;</button>
+                    <button class="dpad-btn" id="btnLeft" data-dir="left" aria-label="Left">&#9664;</button>
+                    <button class="dpad-btn dpad-center" id="btnCenter" disabled aria-hidden="true"></button>
+                    <button class="dpad-btn" id="btnRight" data-dir="right" aria-label="Right">&#9654;</button>
+                    <button class="dpad-btn" id="btnDown" data-dir="down" aria-label="Down">&#9660;</button>
                 </div>
             </div>
             <div id="rightPanel">
@@ -48,9 +52,18 @@
                 </div>
                 <button id="btnViewToggle" class="action-btn">3D View</button>
                 <button id="btnRestart" class="action-btn">Restart</button>
+                <button id="btnHelp" class="action-btn action-btn-quiet">Help</button>
+                <button id="btnMute" class="action-btn action-btn-quiet" aria-pressed="false">Sound on</button>
             </div>
         </div>
+        <div id="legend">Arrows / WASD move (hold to keep going) &middot; V 3D view &middot; R restart &middot; Space next level &middot; W ghost &middot; M sound &middot; H help</div>
+        <div id="levelSelect" role="group" aria-label="Level select"></div>
+        <div id="srStatus" class="visually-hidden" aria-live="polite"></div>
     </div>
+    <script src="core.js"></script>
+    <script src="render2d.js"></script>
+    <script src="render3d.js"></script>
+    <script src="audio.js"></script>
     <script src="game.js"></script>
 </body>
 </html>
