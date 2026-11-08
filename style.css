@@ -641,3 +641,118 @@ body {
 #batteryFill.over {
     box-shadow: 0 0 8px #6EC6FF;
 }
+
+/* === Full screen =========================================================================
+   #sidePanel wraps the controls, panels, legend and level select. Normally it lays out as if
+   it were not there; in full screen it becomes a side column beside the board. */
+#sidePanel {
+    display: contents;
+}
+
+body.is-fullscreen {
+    background: #000;
+    padding: 0;
+    overflow: hidden;
+    height: 100dvh;
+    min-height: 0;
+    align-items: center;
+}
+
+body.is-fullscreen #gameContainer {
+    width: 100vw;
+    height: 100dvh;
+    max-width: none;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    padding: 10px;
+}
+
+body.is-fullscreen #gameTitle {
+    display: none;
+}
+
+body.is-fullscreen #gameCanvas {
+    /* as tall as the screen allows, or as wide as the room beside the side column allows */
+    height: min(100dvh - 20px, (100vw - 20px - 14px - 320px) * 576 / 720);
+    width: auto;
+    border-color: #333;
+}
+
+body.is-fullscreen #sidePanel {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex: 0 0 320px;
+    width: 320px;
+    max-height: 100%;
+    overflow-y: auto;
+    scrollbar-width: thin;
+}
+
+body.is-fullscreen #controlPanel {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    padding: 12px 14px;
+}
+
+body.is-fullscreen #statsPanel {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    row-gap: 8px;
+    min-width: 0;
+}
+
+body.is-fullscreen #statsPanel .stat {
+    width: 48%;
+}
+
+body.is-fullscreen #rightPanel {
+    align-items: stretch;
+    min-width: 0;
+}
+
+body.is-fullscreen #rightPanel .action-btn {
+    width: 100%;
+}
+
+body.is-fullscreen #batteryContainer {
+    align-items: stretch;
+}
+
+body.is-fullscreen #levelDisplay {
+    justify-content: space-between;
+}
+
+body.is-fullscreen .design-panel {
+    padding: 10px 12px 12px;
+}
+
+body.is-fullscreen #legend {
+    font-size: 11px;
+    line-height: 1.5;
+}
+
+/* Portrait screens: the board on top, everything else scrolls beneath it */
+@media (orientation: portrait) {
+    body.is-fullscreen #gameContainer {
+        flex-direction: column;
+        justify-content: flex-start;
+        gap: 8px;
+    }
+
+    body.is-fullscreen #gameCanvas {
+        width: min(100vw - 20px, (100dvh - 20px) * 720 / 576);
+        height: auto;
+    }
+
+    body.is-fullscreen #sidePanel {
+        flex: 1 1 auto;
+        width: 100%;
+        min-height: 0;
+        max-height: none;
+    }
+}

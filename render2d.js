@@ -1725,6 +1725,7 @@ function drawHelp() {
         ['Upgrades', 'Each new star on a level is a point. U or the Upgrades button spends them on the vacuum or the charger.'],
         ['Flashlight', 'F switches the vacuum\'s flashlight on and off. It lights the way ahead in both views.'],
         ['Design', 'The Design button opens colour wheels for the vacuum\'s lights and the flashlight.'],
+        ['Full screen', 'Enter or the Full screen button fills the screen with the game. Enter again or Escape leaves it.'],
         ['Sound', 'M or the Sound button mutes and unmutes.'],
         ['Help', 'H or ? shows this screen. Escape closes it.'],
     ];
@@ -1744,7 +1745,7 @@ function drawHelp() {
         ctx.fillStyle = '#EEE';
         ctx.font = '13px Segoe UI, sans-serif';
         wrapText(text, 150, y, CANVAS_W - 200, 17);
-        y += 41;
+        y += 38;
     }
     ctx.fillStyle = '#AAA';
     ctx.font = '13px Segoe UI, sans-serif';

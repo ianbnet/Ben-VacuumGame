@@ -299,5 +299,17 @@ let finite = true;
 for (let i = 0; i < lm.data.length; i++) if (!Number.isFinite(lm.data[i]) || lm.data[i] < 0 || lm.data[i] > 1.4001) { finite = false; break; }
 check(finite, 'every light value is finite and within range');
 
+section('Table legs and full screen');
+const legs = G("fpTableLegPositions({ type: 'table', col: 10, row: 5, w: 2, h: 2 })");
+check(legs.length === 4, 'a table stands on four legs');
+check(legs.every((p) => p.x > 10 && p.x < 12 && p.y > 5 && p.y < 7), 'every leg stands inside the table footprint');
+check(legs.every((p) => Math.min(p.x - 10, 12 - p.x) < 0.25 && Math.min(p.y - 5, 7 - p.y) < 0.25), 'the legs stand near the corners');
+check(new Set(legs.map((p) => `${p.x},${p.y}`)).size === 4, 'the four legs are in four different places');
+check(G('FP_SPRITE_SIZE.tableLeg.h') === G('FP_BOTTOM_FACTORS.table'), 'legs reach exactly the underside of the table top');
+check(G('canvasDensityFor(2, 720)') === 2 && G('canvasDensityFor(2, 360)') === 2, 'canvas density is the display ratio at layout size or smaller');
+check(Math.abs(G('canvasDensityFor(1, 1350)') - 1.875) < 1e-9, 'a 1x display showing the board at 1350 px renders it at 1.875x');
+check(G('canvasDensityFor(2, 1440)') === 3, 'canvas density is capped at 3');
+check(G('canvasDensityFor(undefined, undefined)') === 1, 'missing display information falls back to 1x');
+
 console.log(`\n${passes} passed, ${failures} failed`);
 process.exit(failures ? 1 : 0);

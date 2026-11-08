@@ -10,6 +10,7 @@
     <div id="gameContainer">
         <h1 id="gameTitle">Roomba Vacuum</h1>
         <canvas id="gameCanvas" width="720" height="576" role="img" aria-label="Game board"></canvas>
+        <div id="sidePanel">
         <div id="controlPanel">
             <div id="statsPanel">
                 <div class="stat">
@@ -51,6 +52,7 @@
                     <span id="levelNum" class="stat-value">1</span>
                 </div>
                 <button id="btnViewToggle" class="action-btn">3D View</button>
+                <button id="btnFullscreen" class="action-btn action-btn-quiet" aria-pressed="false">Full screen</button>
                 <button id="btnRestart" class="action-btn">Restart</button>
                 <button id="btnHelp" class="action-btn action-btn-quiet">Help</button>
                 <button id="btnMute" class="action-btn action-btn-quiet" aria-pressed="false">Sound on</button>
@@ -91,8 +93,9 @@
                 </div>
             </div>
         </div>
-        <div id="legend">Arrows / WASD move (hold to keep going) &middot; V 3D view &middot; G ghost &middot; F flashlight &middot; U upgrades &middot; R restart &middot; Space next level &middot; M sound &middot; H help</div>
+        <div id="legend">Arrows / WASD move (hold to keep going) &middot; V 3D view &middot; Enter full screen &middot; G ghost &middot; F flashlight &middot; U upgrades &middot; R restart &middot; Space next level &middot; M sound &middot; H help</div>
         <div id="levelSelect" role="group" aria-label="Level select"></div>
+        </div>
         <div id="srStatus" class="visually-hidden" aria-live="polite"></div>
     </div>
     <script src="core.js"></script>

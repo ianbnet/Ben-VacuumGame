@@ -5,6 +5,9 @@
 // === GAME STATE ===
 let canvas, ctx;
 let canvasDpr = 1; // device pixel ratio the canvas backing store is scaled by
+let fullscreenFallback = false; // full-screen layout without the browser API (iPhone Safari)
+let fullscreenTimer = null;
+let resizeTimer = null;
 let grid = [];
 let roomba = { col: 0, row: 0, dir: 'right', battery: 100, drawX: 0, drawY: 0 };
 let currentLevel = 0;
@@ -429,6 +432,77 @@ const keyMap = {
     W: 'up', S: 'down', A: 'left', D: 'right',
 };
 
+// --- Full screen ---------------------------------------------------------------------------
+
+// Backing-store density for a canvas displayed cssWidth CSS pixels wide: the display's pixel
+// ratio, scaled up when the canvas is drawn larger than its 720 px layout size, capped at 3
+function canvasDensityFor(pixelRatio, cssWidth) {
+    const ratio = Math.max(1, pixelRatio || 1);
+    const grow = Math.max(1, (cssWidth || CANVAS_W) / CANVAS_W);
+    return Math.min(3, ratio * grow);
+}
+
+function isFullscreen() {
+    return fullscreenFallback || !!(document.fullscreenElement || document.webkitFullscreenElement);
+}
+
+// Enter or Escape, or the Full screen button. Uses the browser's full screen where it exists and
+// a fixed full-viewport layout where it does not.
+function toggleFullscreen() {
+    if (isFullscreen()) {
+        fullscreenFallback = false;
+        if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {});
+        else if (document.webkitFullscreenElement && document.webkitExitFullscreen) document.webkitExitFullscreen();
+        syncFullscreen();
+        return;
+    }
+    const root = document.documentElement;
+    const request = root.requestFullscreen || root.webkitRequestFullscreen;
+    const useFallback = () => {
+        if (isFullscreen()) return;
+        fullscreenFallback = true;
+        syncFullscreen();
+    };
+    if (request) {
+        const p = request.call(root, { navigationUI: 'hide' });
+        if (p && p.catch) p.catch(useFallback);
+        // Some embedded browsers neither enter full screen nor refuse; give them a moment, then fill the window
+        clearTimeout(fullscreenTimer);
+        fullscreenTimer = setTimeout(useFallback, 700);
+    } else {
+        useFallback();
+    }
+    syncFullscreen();
+}
+
+// Apply the layout class and button label, then match the canvas density to its new size
+function syncFullscreen() {
+    const on = isFullscreen();
+    if (on) clearTimeout(fullscreenTimer);
+    document.body.classList.toggle('is-fullscreen', on);
+    const btn = document.getElementById('btnFullscreen');
+    if (btn) {
+        btn.textContent = on ? 'Exit full screen' : 'Full screen';
+        btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    }
+    fitCanvasDensity();
+}
+
+// Size the canvas backing store to the density it is displayed at (sharp when full screen
+// scales it up) and rebuild what depends on that density; the 2D scene layers rebuild themselves
+function fitCanvasDensity() {
+    if (!canvas) return;
+    const cssW = canvas.getBoundingClientRect().width || CANVAS_W;
+    const want = canvasDensityFor(window.devicePixelRatio, cssW);
+    if (Math.abs(want - canvasDpr) < 0.02) return;
+    canvasDpr = want;
+    canvas.width = Math.round(CANVAS_W * canvasDpr);
+    canvas.height = Math.round(CANVAS_H * canvasDpr);
+    ctx.setTransform(canvasDpr, 0, 0, canvasDpr, 0, 0);
+    createFloorPatterns();
+    if (typeof fp3d !== 'undefined' && fp3d) fp3d.sceneBuf = null;
+}
+
 // Keys pressed inside the design or upgrades panels (wheels, switches, buttons) belong to them
 function keyIsForPanel(e) {
     return !!(e.target && e.target.closest && e.target.closest('#designPanel, #upgradePanel'));
@@ -454,6 +528,20 @@ document.addEventListener('keydown', (e) => {
     }
     if (helpVisible) {
         if (e.key === 'Escape') toggleHelp();
+        return;
+    }
+
+    // Enter: full screen on / off (unless a button or control has focus, which Enter should press)
+    if (e.key === 'Enter') {
+        const t = e.target;
+        if (t && t !== document.body && t.closest && t.closest('button, input, select, textarea, a, [tabindex]')) return;
+        e.preventDefault();
+        toggleFullscreen();
+        return;
+    }
+    // Escape leaves the fallback full-screen layout (the browser handles the real one itself)
+    if (e.key === 'Escape' && fullscreenFallback) {
+        toggleFullscreen();
         return;
     }
 
@@ -775,6 +863,19 @@ document.addEventListener('DOMContentLoaded', () => {
             elBtnHelp.blur();
         });
     }
+    const elBtnFull = document.getElementById('btnFullscreen');
+    if (elBtnFull) {
+        elBtnFull.addEventListener('click', () => {
+            toggleFullscreen();
+            elBtnFull.blur();
+        });
+    }
+    document.addEventListener('fullscreenchange', syncFullscreen);
+    document.addEventListener('webkitfullscreenchange', syncFullscreen);
+    window.addEventListener('resize', () => {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(fitCanvasDensity, 120);
+    });
     const elBtnGhost = document.getElementById('btnGhost');
     if (elBtnGhost) {
         elBtnGhost.addEventListener('click', () => {

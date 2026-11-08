@@ -19,8 +19,14 @@ const FP_FOG_MAX = 0.4;
 const FP_FOV = Math.PI / 3;                  // 60 degree field of view
 const FP_HEIGHT_FACTORS = { wall: 1.0, couch: 0.55, table: 0.5, chair: 0.65, plant: 0.9, petbed: 0.25 };
 const FP_SPRITE_TYPES = { plant: 'spritePlant', chair: 'spriteChair', mote: 'mote' };
-const FP_SPRITE_SIZE = { plant: { w: 0.8, h: 0.95 }, chair: { w: 0.85, h: 0.7 }, mote: { w: 0.045, h: 0.045 } };
 const FP_BOTTOM_FACTORS = { table: 0.42 };   // raised slabs you can see under
+const FP_TABLE_LEG_INSET = 0.17;             // how far in from the table's edge its legs stand
+const FP_SPRITE_SIZE = {
+    plant: { w: 0.8, h: 0.95 },
+    chair: { w: 0.85, h: 0.7 },
+    mote: { w: 0.045, h: 0.045 },
+    tableLeg: { w: 0.16, h: FP_BOTTOM_FACTORS.table }, // floor up to the underside of the top
+};
 const FP_MINIMAP_SCALE = 9;
 const FP_RES_MAX = 1.5;                      // internal resolution as a multiple of the canvas size
 const FP_SLOW_FRAME_MS = 14;                 // average frame cost that drops the resolution a notch
@@ -417,6 +423,36 @@ function fpBuildTextures() {
         t.fillRect(n * 0.17, n * 0.8, n * 0.66, n * 0.04);
     });
 
+    // A turned wooden table leg: an apron block under the top, a tapering shaft, a foot
+    tex.tableLeg = fpMakeTexture(32, 256, (t, w, h) => {
+        t.clearRect(0, 0, w, h);
+        const wood = t.createLinearGradient(w * 0.25, 0, w * 0.75, 0);
+        wood.addColorStop(0, '#8E6A55');
+        wood.addColorStop(0.3, '#6E4E3F');
+        wood.addColorStop(1, '#3A2820');
+        t.fillStyle = wood;
+        t.fillRect(w * 0.1, 0, w * 0.8, h * 0.13);              // apron
+        const halfAt = (f) => 0.25 - (0.07 * (f - 0.13)) / 0.82; // shaft half-width, tapering down
+        t.beginPath();
+        t.moveTo(w * (0.5 - halfAt(0.13)), h * 0.13);
+        t.lineTo(w * (0.5 + halfAt(0.13)), h * 0.13);
+        t.lineTo(w * (0.5 + halfAt(0.95)), h * 0.95);
+        t.lineTo(w * (0.5 - halfAt(0.95)), h * 0.95);
+        t.closePath();
+        t.fill();
+        t.fillStyle = 'rgba(0,0,0,0.28)';
+        t.fillRect(w * 0.1, h * 0.115, w * 0.8, h * 0.015);     // shadow line under the apron
+        for (const f of [0.24, 0.5, 0.76]) {                    // turned rings
+            const hw = halfAt(f);
+            t.fillStyle = 'rgba(0,0,0,0.24)';
+            t.fillRect(w * (0.5 - hw), h * f, w * 2 * hw, h * 0.012);
+            t.fillStyle = 'rgba(255,255,255,0.16)';
+            t.fillRect(w * (0.5 - hw), h * (f + 0.012), w * 2 * hw, h * 0.008);
+        }
+        t.fillStyle = '#33221B';
+        t.fillRect(w * (0.5 - halfAt(0.95)), h * 0.95, w * 2 * halfAt(0.95), h * 0.05); // foot
+    });
+
     tex.mote = fpMakeTexture(16, 16, (t, n) => {
         t.clearRect(0, 0, n, n);
         const g = t.createRadialGradient(n / 2, n / 2, 0, n / 2, n / 2, n / 2);
@@ -677,11 +713,27 @@ function fpBlend(a, b, k) {
 
 // --- Views ---------------------------------------------------------------------------
 
+// Where a table's legs stand: one in from each corner of its footprint
+function fpTableLegPositions(obs) {
+    const i = FP_TABLE_LEG_INSET;
+    return [
+        { x: obs.col + i, y: obs.row + i },
+        { x: obs.col + obs.w - i, y: obs.row + i },
+        { x: obs.col + i, y: obs.row + obs.h - i },
+        { x: obs.col + obs.w - i, y: obs.row + obs.h - i },
+    ];
+}
+
 function fpLevelSprites() {
     if (!fp3d) initFirstPerson();
     if (fp3d.spriteLevel !== currentLevel) {
         fp3d.levelSprites = [];
         for (const obs of LEVELS[currentLevel].obstacles) {
+            if (FP_BOTTOM_FACTORS[obs.type]) {
+                for (const p of fpTableLegPositions(obs)) {
+                    fp3d.levelSprites.push({ x: p.x, y: p.y, z: 0, type: 'tableLeg', texKey: 'tableLeg', emissive: false });
+                }
+            }
             const key = FP_SPRITE_TYPES[obs.type];
             if (!key) continue;
             for (let dr = 0; dr < obs.h; dr++) {
@@ -843,7 +895,7 @@ function fpRenderScene(view) {
         if (ty <= 0.08) continue;
         const sx = halfW * (1 + tx / ty);
         const size = FP_SPRITE_SIZE[s.type];
-        const wPx = ((halfW / planeLen) * size.w) / ty;
+        const wPx = Math.max(1.5, ((halfW / planeLen) * size.w) / ty);
         const left = sx - wPx / 2, right = sx + wPx / 2;
         if (right < 0 || left >= W) continue;
         const z = s.z || 0;
@@ -1041,20 +1093,39 @@ function fpRenderScene(view) {
         for (let i = hits.length - 1; i >= 0; i--) {
             const hit = hits[i];
             const d = hit.dist;
-            while (si < colSprites.length && colSprites[si].depth >= d) paintSprite(colSprites[si++], x, rayDirX, rayDirY);
             const texture = tex[hit.type] || tex.wall;
             const tw = texture.w, th = texture.h;
             const top = horizon - ((hit.h - FP_EYE) * S) / d;
             const raised = hit.hb > FP_EYE; // a table top: open underneath
             const bot = raised ? horizon - ((hit.hb - FP_EYE) * S) / d : horizon + eyeS / d;
-            const faceH = bot - top;
-            const y0 = Math.max(0, Math.ceil(top));
-            const y1 = Math.min(H - 1, Math.floor(bot));
             const fog = hit.type === 'window' ? 0 : Math.min(FP_FOG_MAX, d * FP_FOG_PER_TILE);
             const shade = hit.side === 1 ? 0.8 : 1.0;
             const tu = (hit.u * (tw - 1)) | 0;
             const lit = coneX > 0 ? coneX * fpLightFalloff(d) : 0;
             const lr = hit.lr, lg = hit.lg, lb = hit.lb;
+            const under = raised && hit.dExit > 0;
+            // Sprites behind this hit (behind the far edge of a slab you can see under)
+            const farDepth = under ? hit.dExit : d;
+            while (si < colSprites.length && colSprites[si].depth >= farDepth) paintSprite(colSprites[si++], x, rayDirX, rayDirY);
+            // Underside of a raised slab, painted back to front in segments so the legs
+            // standing under it are slotted in at their own depth
+            if (under) {
+                const c = fpShade(texture.avg, 0.45, fog, lit * 0.5, lr, lg, lb);
+                const hbS = (hit.hb - FP_EYE) * S;
+                let farRow = Math.min(H, Math.ceil(horizon - hbS / hit.dExit));
+                for (;;) {
+                    const legged = si < colSprites.length && colSprites[si].depth >= d;
+                    const nearDepth = legged ? colSprites[si].depth : d;
+                    const ya = Math.max(0, Math.ceil(horizon - hbS / nearDepth));
+                    for (let y = ya; y < farRow; y++) buf[y * W + x] = c;
+                    farRow = ya;
+                    if (!legged) break;
+                    paintSprite(colSprites[si++], x, rayDirX, rayDirY);
+                }
+            }
+            const faceH = bot - top;
+            const y0 = Math.max(0, Math.ceil(top));
+            const y1 = Math.min(H - 1, Math.floor(bot));
             for (let y = y0; y <= y1; y++) {
                 const tv = (((y - top) / faceH) * (th - 1)) | 0;
                 buf[y * W + x] = fpShade(texture[tv * tw + tu], y === y0 ? shade * 0.75 : shade, fog, lit, lr, lg, lb);
@@ -1065,14 +1136,6 @@ function fpRenderScene(view) {
                 const ya = Math.max(0, Math.ceil(topFar));
                 const yb = Math.min(H - 1, Math.floor(top));
                 const c = fpShade(texture.avg, 1.25, fog, lit, lr, lg, lb);
-                for (let y = ya; y < yb; y++) buf[y * W + x] = c;
-            }
-            // Underside of a raised slab
-            if (raised && hit.dExit > 0) {
-                const botFar = horizon - ((hit.hb - FP_EYE) * S) / hit.dExit;
-                const ya = Math.max(0, Math.ceil(bot));
-                const yb = Math.min(H - 1, Math.floor(botFar));
-                const c = fpShade(texture.avg, 0.45, fog, lit * 0.5, lr, lg, lb);
                 for (let y = ya; y < yb; y++) buf[y * W + x] = c;
             }
             // Reflection in the floor of anything standing on it

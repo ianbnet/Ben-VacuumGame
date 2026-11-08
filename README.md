@@ -18,6 +18,7 @@ Then open http://localhost:3000. Any static file server works (`npm start` runs 
 |---|---|
 | Arrows / WASD | Move. Hold to keep going. |
 | V | Switch between 2D and 3D. In 3D, left and right turn in place; up and down drive forward and back. |
+| Enter | Full screen on / off (Escape also leaves it). The controls move to a side column and the board fills the rest. |
 | F | Flashlight on / off. |
 | R | Restart the level (also restarts its score). |
 | Space | Next level once a level is complete; ends the ghost replay. |
