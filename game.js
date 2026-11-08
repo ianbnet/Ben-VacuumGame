@@ -138,7 +138,7 @@ function initLevel(levelIndex) {
     buildLevelSelect();
     updateUI();
     // Get the 3D view ready for this level while the banner is up
-    if (typeof fpWarmUp === 'function' && typeof requestAnimationFrame === 'function') setTimeout(fpWarmUp, 80);
+    if (typeof fpWarmUp === 'function' && typeof requestAnimationFrame === 'function') setTimeout(warmUp3d, 80);
 }
 
 // Everything that depends on the upgrade levels: which tiles charge, and how far home is from
@@ -432,6 +432,56 @@ const keyMap = {
     W: 'up', S: 'down', A: 'left', D: 'right',
 };
 
+// --- 3D renderer selection -----------------------------------------------------------------
+
+// The GPU renderer (render3d-gl.js) when it loaded and the player has not chosen Classic
+function useGl() {
+    return design.renderer !== 'classic' && typeof window !== 'undefined' && !!window.gl3d && window.gl3d.ready;
+}
+
+// Draw the first-person frame with whichever renderer is active, then the shared HUD
+function renderFirstPersonAny(view) {
+    if (!useGl()) {
+        renderFirstPerson(view);
+        return;
+    }
+    if (!fp3d) initFirstPerson(); // the view model and HUD live in render3d.js
+    view = view || fpPlayerView();
+    let frame = null;
+    try {
+        frame = window.gl3d.render(view, dtMs);
+    } catch (e) {
+        console.warn('GPU renderer failed, switching to Classic', e);
+        design.renderer = 'classic';
+        if (typeof updateDesignUI === 'function') updateDesignUI();
+    }
+    if (!frame) {
+        renderFirstPerson(view);
+        return;
+    }
+    ctx.save();
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(frame, 0, 0, CANVAS_W, CANVAS_H);
+    ctx.restore();
+    if (bumpFlash > 0) {
+        ctx.save();
+        ctx.globalAlpha = (bumpFlash / 10) * 0.3;
+        const bf = ctx.createRadialGradient(CANVAS_W / 2, CANVAS_H / 2, CANVAS_W * 0.3, CANVAS_W / 2, CANVAS_H / 2, CANVAS_W * 0.7);
+        bf.addColorStop(0, 'rgba(255,0,0,0)');
+        bf.addColorStop(1, 'rgba(255,50,50,0.7)');
+        ctx.fillStyle = bf;
+        ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+        ctx.restore();
+    }
+    fpDrawHud(view, false);
+}
+
+// Pre-build whatever the active 3D renderer needs so the first 3D frame is instant
+function warmUp3d() {
+    if (typeof fpWarmUp === 'function') fpWarmUp();
+    if (useGl()) window.gl3d.warm();
+}
+
 // --- Full screen ---------------------------------------------------------------------------
 
 // Backing-store density for a canvas displayed cssWidth CSS pixels wide: the display's pixel
@@ -501,6 +551,7 @@ function fitCanvasDensity() {
     ctx.setTransform(canvasDpr, 0, 0, canvasDpr, 0, 0);
     createFloorPatterns();
     if (typeof fp3d !== 'undefined' && fp3d) fp3d.sceneBuf = null;
+    if (useGl()) window.gl3d.setDensity(canvasDpr);
 }
 
 // Keys pressed inside the design or upgrades panels (wheels, switches, buttons) belong to them
@@ -775,7 +826,7 @@ function renderFrame(timestamp) {
         updateNpcReplay();
         if (viewMode === 'FP' && gameState === 'PAR_REPLAY') {
             // Ride along with the ghost
-            renderFirstPerson(fpGhostView());
+            renderFirstPersonAny(fpGhostView());
         } else {
             drawScene(npcReplay.grid, null);
             drawNpcTrail();
@@ -787,7 +838,7 @@ function renderFrame(timestamp) {
         if (gameState === 'PAR_REPLAY') drawNpcOverlay();
         else drawOverlay();
     } else if (fpActive) {
-        renderFirstPerson();
+        renderFirstPersonAny();
         drawOverlay();
     } else {
         drawScene(grid, tileCleanFade);
@@ -938,5 +989,5 @@ document.addEventListener('DOMContentLoaded', () => {
     if (typeof initUpgradeUI === 'function') initUpgradeUI();
     updateViewButtons();
     requestAnimationFrame(render);
-    if (typeof fpWarmUp === 'function') setTimeout(fpWarmUp, 400);
+    if (typeof fpWarmUp === 'function') setTimeout(warmUp3d, 400);
 });

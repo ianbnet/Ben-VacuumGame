@@ -756,3 +756,30 @@ body.is-fullscreen #legend {
         max-height: none;
     }
 }
+
+/* === Graphics settings in the design panel === */
+.design-graphics {
+    gap: 12px 32px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid #4A4A5C;
+}
+
+.design-select {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.design-select select {
+    background: #2B2B38;
+    color: #FFF;
+    border: 1px solid #5A5A6C;
+    border-radius: 6px;
+    padding: 5px 8px;
+    font: inherit;
+    font-size: 13px;
+}
+
+.design-select select:disabled {
+    opacity: 0.5;
+}

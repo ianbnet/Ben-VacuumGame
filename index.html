@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Roomba Vacuum Game</title>
     <link rel="stylesheet" href="style.css">
+    <script type="importmap">{ "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/" } }</script>
 </head>
 <body>
     <div id="gameContainer">
@@ -80,6 +81,12 @@
                     <button id="btnDesignClose" class="action-btn action-btn-quiet">Close</button>
                 </div>
             </div>
+            <div class="design-row design-graphics">
+                <label class="design-select"><span class="field-label">3D renderer</span>
+                    <select id="rendererSelect"><option value="gl">Modern (GPU)</option><option value="classic">Classic</option></select></label>
+                <label class="design-select"><span class="field-label">Quality</span>
+                    <select id="qualitySelect"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="ultra">Ultra</option></select></label>
+            </div>
             <div class="design-row">
                 <div class="design-field" id="lightsField">
                     <span class="field-label">Vacuum lights</span>
@@ -101,10 +108,12 @@
     <script src="core.js"></script>
     <script src="upgrades.js"></script>
     <script src="design.js"></script>
+    <script src="scene3d.js"></script>
     <script src="render2d.js"></script>
     <script src="scene2d.js"></script>
     <script src="render3d.js"></script>
     <script src="audio.js"></script>
     <script src="game.js"></script>
+    <script type="module" src="render3d-gl.js"></script>
 </body>
 </html>

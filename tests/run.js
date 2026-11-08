@@ -59,7 +59,7 @@ const sandbox = {
 };
 sandbox.window = sandbox;
 vm.createContext(sandbox);
-for (const f of ['core.js', 'upgrades.js', 'design.js', 'render3d.js', 'game.js']) {
+for (const f of ['core.js', 'upgrades.js', 'design.js', 'scene3d.js', 'render3d.js', 'game.js']) {
     vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), sandbox, { filename: f });
 }
 const G = (expr) => vm.runInContext(expr, sandbox);
@@ -310,6 +310,48 @@ check(G('canvasDensityFor(2, 720)') === 2 && G('canvasDensityFor(2, 360)') === 2
 check(Math.abs(G('canvasDensityFor(1, 1350)') - 1.875) < 1e-9, 'a 1x display showing the board at 1350 px renders it at 1.875x');
 check(G('canvasDensityFor(2, 1440)') === 3, 'canvas density is capped at 3');
 check(G('canvasDensityFor(undefined, undefined)') === 1, 'missing display information falls back to 1x');
+
+section('3D scene description');
+check(G('S3_THEMES.length') === G('LEVELS.length'), 'one theme per room');
+check(G("s3Facing({ col: 5, row: 2, w: 3, h: 1 })") === 'north', 'a couch near the top wall puts its back to the north');
+check(G("s3Facing({ col: 12, row: 5, w: 2, h: 2 })") === 'east', 'furniture near the right wall faces west');
+let fitAll = true, floorAll = true, headroomAll = true, legsAll = true;
+for (let lv = 0; lv < G('LEVELS.length'); lv++) {
+    const items = G(`s3Furniture(${lv})`);
+    for (const item of items) {
+        const obs = item.footprint;
+        const swap = Math.abs(Math.abs(item.yaw) - Math.PI / 2) < 1e-6;
+        const lw = swap ? obs.h : obs.w, ld = swap ? obs.w : obs.h;
+        for (const p of item.parts) {
+            const pts = p.shape === 'rod' ? [p.from, p.to] : [p.pos];
+            for (const [x, y, z] of pts) {
+                if (Math.abs(x) > lw / 2 + 0.3 || Math.abs(z) > ld / 2 + 0.3) fitAll = false;
+                if (y < -0.001) floorAll = false;
+                const half = p.size ? p.size[1] / 2 : p.h ? p.h / 2 : p.r || 0;
+                if (y + half > G('S3_WALL_H') + 0.001) headroomAll = false;
+            }
+        }
+        if ((obs.type === 'table' || obs.type === 'couch') && !item.parts.some((p) => p.shape === 'cyl' && p.pos[1] < 0.5)) legsAll = false;
+    }
+}
+check(fitAll, 'every part of every piece of furniture stays over its footprint');
+check(floorAll, 'nothing sits below the floor');
+check(headroomAll, 'nothing pokes through the ceiling');
+check(legsAll, 'tables and couches stand on legs');
+const arch = G('s3Architecture(0)');
+const glass = arch.find((p) => p.tag === 'glass');
+check(glass && Math.abs(glass.size[0] - (G('S3_WINDOW.x1') - G('S3_WINDOW.x0'))) < 1e-9, 'the window glass spans the window opening');
+check(arch.filter((p) => p.tag === 'slat').length > 5, 'the window has blinds');
+check(arch.some((p) => p.tag === 'door') && arch.filter((p) => p.tag === 'bulb').length >= 10, 'there is a door and a chandelier with many bulbs');
+const dock0 = G('s3Dock(0)');
+check(dock0.pos[0] === G('LEVELS[0].charger.col') + 0.5 && dock0.pos[2] === G('LEVELS[0].charger.row') + 0.5, 'the dock sits on the charger tile');
+check(dock0.parts.every((p) => p.pos[1] < 0.1 || Math.abs(p.pos[2]) > 0.3), 'nothing tall stands where the vacuum parks on the dock');
+let sunOk = true;
+for (let lv = 0; lv < G('LEVELS.length'); lv++) {
+    const d = G(`s3SunDirection(s3Theme(${lv}))`);
+    if (!(d[1] > 0 && d[2] < 0)) sunOk = false;
+}
+check(sunOk, 'in every room the sun is up and comes in through the north window');
 
 console.log(`\n${passes} passed, ${failures} failed`);
 process.exit(failures ? 1 : 0);

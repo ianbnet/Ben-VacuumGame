@@ -1332,10 +1332,11 @@ function fpDrawBumper(shakeX, shakeY) {
     ctx.beginPath();
     ctx.arc(cx, cy, r - 2, Math.PI, Math.PI * 2);
     ctx.clip();
-    if (fp3d && fp3d.canvas) {
+    const frame = fpFrameCanvas();
+    if (frame) {
         ctx.translate(0, CANVAS_H * 2 - 30);
         ctx.scale(1, -1);
-        ctx.drawImage(fp3d.canvas, 0, 0, CANVAS_W, CANVAS_H);
+        ctx.drawImage(frame, 0, 0, CANVAS_W, CANVAS_H);
     }
     ctx.restore();
     ctx.strokeStyle = bumpFlash > 0 ? `rgba(255, 82, 82, ${0.5 + bumpFlash / 20})` : design.lightColor;
@@ -1494,10 +1495,22 @@ function renderFirstPerson(view) {
         ctx.restore();
     }
 
-    if (!view.ghost) fpDrawBumper(shakeX, shakeY);
+    fpDrawHud(view, true, shakeX, shakeY);
+}
+
+// The HUD both renderers share: bumper (classic only; the GPU renderer draws the body itself),
+// compass, status and minimap
+function fpDrawHud(view, bumper, shakeX, shakeY) {
+    if (bumper && !view.ghost) fpDrawBumper(shakeX || 0, shakeY || 0);
     fpDrawCompass(view.angle);
     if (view.showHud) fpDrawStatus();
     fpDrawMinimap(view);
+}
+
+// The canvas holding the last 3D frame, whichever renderer drew it
+function fpFrameCanvas() {
+    if (typeof useGl === 'function' && useGl() && window.gl3d.canvas) return window.gl3d.canvas;
+    return fp3d && fp3d.canvas;
 }
 
 // Build textures, bake the current level's light and run one hidden frame so the first visible
@@ -1559,7 +1572,8 @@ function fpDrawDive() {
         ctx.translate(CANVAS_W / 2, CANVAS_H / 2);
         ctx.scale(s, s);
         ctx.translate(-CANVAS_W / 2, -CANVAS_H / 2);
-        ctx.drawImage(fp3d.canvas, 0, 0, CANVAS_W, CANVAS_H);
+        const frame = fpFrameCanvas();
+        if (frame) ctx.drawImage(frame, 0, 0, CANVAS_W, CANVAS_H);
     }
     ctx.restore();
     fpDive.t -= dtMs / 520;

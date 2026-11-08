@@ -3,13 +3,17 @@
 // nothing here touches the DOM at load time, so tests can load it headlessly.
 
 const DESIGN_KEY = 'ben-vacuum-game.design.v1';
-const DESIGN_DEFAULTS = { lightColor: '#1A9A8A', flashOn: false, flashColor: '#FFE2A8' };
+const DESIGN_DEFAULTS = { lightColor: '#1A9A8A', flashOn: false, flashColor: '#FFE2A8', renderer: 'gl', quality: 'high' };
+const RENDERERS = ['gl', 'classic'];
+const QUALITIES = ['low', 'medium', 'high', 'ultra'];
 
 // Current settings plus derived RGB triples the renderers read every frame
 const design = {
     lightColor: DESIGN_DEFAULTS.lightColor,
     flashOn: DESIGN_DEFAULTS.flashOn,
     flashColor: DESIGN_DEFAULTS.flashColor,
+    renderer: DESIGN_DEFAULTS.renderer,
+    quality: DESIGN_DEFAULTS.quality,
     lightRgb: [26, 154, 138],
     flashRgb: [255, 226, 168],
 };
@@ -90,6 +94,8 @@ function designLoad() {
                 if (isHexColor(s.lightColor)) design.lightColor = s.lightColor.toUpperCase();
                 if (isHexColor(s.flashColor)) design.flashColor = s.flashColor.toUpperCase();
                 design.flashOn = !!s.flashOn;
+                if (RENDERERS.includes(s.renderer)) design.renderer = s.renderer;
+                if (QUALITIES.includes(s.quality)) design.quality = s.quality;
             }
         }
     } catch (e) {
@@ -104,6 +110,8 @@ function designSave() {
             lightColor: design.lightColor,
             flashOn: design.flashOn,
             flashColor: design.flashColor,
+            renderer: design.renderer,
+            quality: design.quality,
         }));
     } catch (e) {
         // storage blocked
@@ -128,6 +136,23 @@ function toggleFlashlight(on) {
     design.flashOn = on === undefined ? !design.flashOn : !!on;
     designSave();
     designApply();
+}
+
+// Graphics: which 3D renderer draws the first-person view, and how hard it works
+function setRenderer(name) {
+    if (!RENDERERS.includes(name)) return;
+    design.renderer = name;
+    designSave();
+    updateDesignUI();
+    if (typeof warmUp3d === 'function') setTimeout(warmUp3d, 0);
+}
+
+function setQuality(name) {
+    if (!QUALITIES.includes(name)) return;
+    design.quality = name;
+    designSave();
+    if (typeof window !== 'undefined' && window.gl3d && window.gl3d.ready) window.gl3d.setQuality(name);
+    updateDesignUI();
 }
 
 function designReset() {
@@ -275,6 +300,15 @@ function updateDesignUI() {
     if (hexF) hexF.textContent = design.flashColor;
     if (toggle) toggle.checked = design.flashOn;
     if (flashField) flashField.classList.toggle('is-off', !design.flashOn);
+    const rendererSel = document.getElementById('rendererSelect');
+    const qualitySel = document.getElementById('qualitySelect');
+    const glOk = typeof window !== 'undefined' && window.gl3d && window.gl3d.ready;
+    if (rendererSel) {
+        rendererSel.value = design.renderer;
+        const glOpt = rendererSel.querySelector('option[value="gl"]');
+        if (glOpt && !glOk) { glOpt.disabled = true; glOpt.textContent = 'Modern (unavailable here)'; }
+    }
+    if (qualitySel) { qualitySel.value = design.quality; qualitySel.disabled = design.renderer === 'classic' || !glOk; }
     const btn = document.getElementById('btnDesign');
     if (btn) btn.setAttribute('aria-expanded', designPanelOpen ? 'true' : 'false');
 }
@@ -302,6 +336,11 @@ function initDesignUI() {
     };
     const toggle = document.getElementById('flashToggle');
     if (toggle) toggle.addEventListener('change', () => toggleFlashlight(toggle.checked));
+    const rendererSel = document.getElementById('rendererSelect');
+    if (rendererSel) rendererSel.addEventListener('change', () => { setRenderer(rendererSel.value); rendererSel.blur(); });
+    const qualitySel = document.getElementById('qualitySelect');
+    if (qualitySel) qualitySel.addEventListener('change', () => { setQuality(qualitySel.value); qualitySel.blur(); });
+    if (typeof window !== 'undefined' && window.gl3d && window.gl3d.ready) window.gl3d.setQuality(design.quality);
     const reset = document.getElementById('btnDesignReset');
     if (reset) reset.addEventListener('click', () => { designReset(); reset.blur(); });
     const btn = document.getElementById('btnDesign');
