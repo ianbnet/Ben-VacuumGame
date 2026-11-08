@@ -352,6 +352,8 @@ for (let lv = 0; lv < G('LEVELS.length'); lv++) {
     if (!(d[1] > 0 && d[2] < 0)) sunOk = false;
 }
 check(sunOk, 'in every room the sun is up and comes in through the north window');
+const top = G('s3TopDownCamera(56, 720 / 576)');
+check(top.x === G('COLS / 2') && top.z === G('ROWS / 2') && top.y * Math.tan((56 * Math.PI) / 360) >= G('ROWS / 2'), 'the overhead camera frames the whole board');
 
 console.log(`\n${passes} passed, ${failures} failed`);
 process.exit(failures ? 1 : 0);

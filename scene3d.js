@@ -498,6 +498,15 @@ function s3WallRadial(wall, along, y, inset, angle, len) {
     return s3WallPoint(wall, along + dx, y + dy, inset).pos;
 }
 
+// A camera straight above the room that frames the whole board like the 2D view does
+function s3TopDownCamera(fovDeg, aspect) {
+    const halfH = ROWS / 2 + 0.8;
+    const halfW = COLS / 2 + 0.8;
+    const t = Math.tan(((fovDeg || 56) * Math.PI) / 360);
+    const height = Math.max(halfH / t, halfW / (t * (aspect || COLS / ROWS)));
+    return { x: COLS / 2, y: height, z: ROWS / 2 };
+}
+
 // Where the sun is, as a unit direction from the room towards the light
 function s3SunDirection(theme) {
     const az = (theme.sun.azimuth * Math.PI) / 180;

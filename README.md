@@ -19,6 +19,7 @@ Then open http://localhost:3000. Any static file server works (`npm start` runs 
 | Arrows / WASD | Move. Hold to keep going. |
 | V | Switch between 2D and 3D. In 3D, left and right turn in place; up and down drive forward and back. |
 | Enter | Full screen on / off (Escape also leaves it). The controls move to a side column and the board fills the rest. |
+| Drag | In 3D, drag on the board to look around while stopped. The view eases back when you drive. |
 | F | Flashlight on / off. |
 | R | Restart the level (also restarts its score). |
 | Space | Next level once a level is complete; ends the ghost replay. |
@@ -58,3 +59,21 @@ node tests/run.js
 ## History
 
 Built on Replit in March 2026. Reworked in November 2026 from the assessment in `docs/assessment-2026-11-07.md`; `docs/changes-2026-11-07.md` lists what changed.
+
+## 3D renderer
+
+![Atomic Lounge: shell chair and sofa reflected in the polished floor](docs/img/3d-atomic-lounge-chair.jpg)
+![Chrome Diner: red stools and a chrome dinette on checkerboard lino](docs/img/3d-chrome-diner.jpg)
+
+The first-person view is drawn by a Three.js renderer over WebGL2 (`render3d-gl.js`), styled as a
+1950s atomic-age home: six themed rooms, real sunlight through the blinds, glossy floors that
+reflect the room as you clean them, depth of field and film grain. Three.js r170 is vendored under
+`vendor/three/` and loaded through an import map, so there is still no build step.
+
+The Design panel has a **3D renderer** setting (Modern GPU, or Classic for the original software
+raycaster, which also takes over automatically where WebGL2 is missing) and a **Quality** preset
+(Low to Ultra) that trades resolution, shadows, ambient occlusion, depth of field and reflections
+for speed. The internal resolution also adapts to frame time on its own.
+
+`scene3d.js` describes the rooms as plain data (themes, furniture built from parts, architecture
+and decor); `docs/assessment-3d-aaa-2026-11-08.md` is the plan this followed.

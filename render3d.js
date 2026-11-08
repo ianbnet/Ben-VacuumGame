@@ -1541,6 +1541,13 @@ function fpStartDive(dir) {
     fpDive.ry = roomba.drawY;
 }
 
+// How far the GPU renderer's camera is along its flight: 0 at the vacuum's eye, 1 above the board
+function fpDiveFly() {
+    if (fpDive.t <= 0) return 0;
+    const p = fpDive.dir > 0 ? fpDive.t : 1 - fpDive.t;
+    return p * p * (3 - 2 * p);
+}
+
 // Draw the transition over whatever the frame already shows; returns true while active
 function fpDrawDive() {
     if (fpDive.t <= 0) return false;
@@ -1548,8 +1555,28 @@ function fpDrawDive() {
     const t = fpDive.t;
     const p = 1 - t;
     const ease = p * p * (3 - 2 * p);
+    const gl = typeof useGl === 'function' && useGl();
     ctx.save();
-    if (fpDive.dir > 0) {
+    if (gl && fpDive.dir > 0) {
+        // The camera is flying down from above the board; the board itself just fades away
+        if (!fp3d.sceneBuf) fp3d.sceneBuf = makeLayer();
+        const L = fp3d.sceneBuf;
+        withCtx(L.ctx, () => {
+            ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+            drawScene(grid, null);
+            drawLighting();
+            drawRoomba();
+        });
+        ctx.globalAlpha = Math.max(0, Math.min(1, (t - 0.55) / 0.4));
+        ctx.drawImage(L.canvas, 0, 0, CANVAS_W, CANVAS_H);
+    } else if (gl) {
+        // Back out: a fresh 3D frame climbs to the overhead shot, then gives way to the board
+        const frame = window.gl3d.render(fpPlayerView(), dtMs, fpDiveFly());
+        if (frame) {
+            ctx.globalAlpha = Math.max(0, Math.min(1, t / 0.35));
+            ctx.drawImage(frame, 0, 0, CANVAS_W, CANVAS_H);
+        }
+    } else if (fpDive.dir > 0) {
         // The 2D board zooms into the Roomba and fades out over the 3D frame beneath
         if (!fp3d.sceneBuf) fp3d.sceneBuf = makeLayer();
         const L = fp3d.sceneBuf;
@@ -1576,6 +1603,6 @@ function fpDrawDive() {
         if (frame) ctx.drawImage(frame, 0, 0, CANVAS_W, CANVAS_H);
     }
     ctx.restore();
-    fpDive.t -= dtMs / 520;
+    fpDive.t -= dtMs / (gl ? 1150 : 520);
     return true;
 }

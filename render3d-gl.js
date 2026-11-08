@@ -43,6 +43,7 @@ const G = {
     lastAngle: 0,
     turnBlur: 0,
     glints: [],
+    perf: { cpuMs: 0, dtMs: 16 },
 };
 
 const QUALITY = {
@@ -55,6 +56,20 @@ const QUALITY = {
 const UP = new THREE.Vector3(0, 1, 0);
 const tmpV = new THREE.Vector3();
 const tmpV2 = new THREE.Vector3();
+const eyePos = new THREE.Vector3();
+const eyeQ = new THREE.Quaternion();
+const topPos = new THREE.Vector3();
+const topQ = new THREE.Quaternion();
+
+// Look-around: a drag on the board turns the head while the vacuum stands still
+const look = { yaw: 0, pitch: 0, tx: 0, ty: 0 };
+function lookDrag(dx, dy) {
+    look.tx = Math.max(-1.35, Math.min(1.35, look.tx - dx * 0.0045));
+    look.ty = Math.max(-0.5, Math.min(0.4, look.ty - dy * 0.003));
+}
+function lookRelease(snapBack) {
+    if (snapBack) { look.tx = 0; look.ty = 0; }
+}
 
 // --- Setup -------------------------------------------------------------------------------
 
@@ -219,7 +234,7 @@ function paintFloorCanvas(theme) {
     } else {
         paintWoodFloor(t, theme.floorSeed, px, COLS, ROWS);
         t.globalCompositeOperation = 'multiply';
-        t.fillStyle = '#C9A882';
+        t.fillStyle = '#DFC9AA';
         t.fillRect(0, 0, c.width, c.height);
         t.globalCompositeOperation = 'source-over';
         if (theme.time === 'night') {
@@ -607,13 +622,13 @@ function buildDebris(theme) {
     const mesh = new THREE.InstancedMesh(geo, mat, count);
     const rnd = seededRandom(theme.floorSeed + 1234);
     const base = new Float32Array(count * 7);
-    const colors = [new THREE.Color('#7A6A58'), new THREE.Color('#A8A096'), new THREE.Color('#5C4E42'), new THREE.Color('#B8B2A8')];
+    const colors = [new THREE.Color('#5A4C40'), new THREE.Color('#7D7568'), new THREE.Color('#4A3E34'), new THREE.Color('#8C857A')];
     for (let r = 0; r < ROWS; r++) {
         for (let c = 0; c < COLS; c++) {
             for (let k = 0; k < DEBRIS_PER_TILE; k++) {
                 const i = (r * COLS + c) * DEBRIS_PER_TILE + k;
                 const fluff = rnd() < 0.3;
-                const s = fluff ? 0.022 + rnd() * 0.02 : 0.007 + rnd() * 0.011;
+                const s = fluff ? 0.014 + rnd() * 0.014 : 0.006 + rnd() * 0.009;
                 base[i * 7] = c + 0.1 + rnd() * 0.8;
                 base[i * 7 + 1] = s * 0.45;
                 base[i * 7 + 2] = r + 0.1 + rnd() * 0.8;
@@ -673,7 +688,7 @@ function buildSunBeam(theme) {
     geo.setAttribute('fade', new THREE.Float32BufferAttribute(alphas, 1));
     const mat = new THREE.ShaderMaterial({
         transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
-        uniforms: { uColor: { value: new THREE.Color(theme.sun.color) }, uTime: { value: 0 }, uStrength: { value: theme.time === 'night' ? 0.05 : 0.16 } },
+        uniforms: { uColor: { value: new THREE.Color(theme.sun.color) }, uTime: { value: 0 }, uStrength: { value: theme.time === 'night' ? 0.08 : 0.36 } },
         vertexShader: `attribute float fade; varying float vFade; varying vec3 vPos; varying vec3 vNormalW;
 void main() { vFade = fade; vPos = position; vec4 mv = modelViewMatrix * vec4(position, 1.0); gl_Position = projectionMatrix * mv; }`,
         fragmentShader: `uniform vec3 uColor; uniform float uTime; uniform float uStrength; varying float vFade; varying vec3 vPos;
@@ -683,7 +698,7 @@ float noise(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * 
 void main() {
     vec3 toCam = normalize(cameraPosition - vPos);
     float n = noise(vPos.xz * 1.3 + vec2(uTime * 0.05, 0.0)) * 0.6 + noise(vPos.xy * 2.1 - uTime * 0.03) * 0.4;
-    float a = uStrength * (0.35 + 0.65 * vFade) * (0.5 + 0.5 * n) * smoothstep(0.0, 0.25, vFade) ;
+    float a = uStrength * (0.35 + 0.65 * vFade) * (0.7 + 0.3 * n) * smoothstep(0.0, 0.25, vFade);
     a += uStrength * 0.25 * (1.0 - vFade) * smoothstep(0.0, 0.5, vFade);
     gl_FragColor = vec4(uColor * 1.4, a);
 }`,
@@ -693,6 +708,113 @@ void main() {
     mesh.renderOrder = 5;
     G.beam = mesh;
     return mesh;
+}
+
+// --- Dust drawn into the vacuum as a tile comes clean --------------------------------------------
+
+const INTAKE_N = 240;
+function buildIntake() {
+    const pos = new Float32Array(INTAKE_N * 3);
+    const age = new Float32Array(INTAKE_N).fill(2);
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute('age', new THREE.BufferAttribute(age, 1));
+    const mat = new THREE.ShaderMaterial({
+        transparent: true, depthWrite: false,
+        uniforms: { uScale: { value: 1 } },
+        vertexShader: `attribute float age; varying float vA; uniform float uScale;
+void main() { vA = age; vec4 mv = modelViewMatrix * vec4(position, 1.0); gl_Position = projectionMatrix * mv;
+  gl_PointSize = (1.0 - age) * uScale * 9.0 / max(0.3, -mv.z); }`,
+        fragmentShader: `varying float vA; void main() { float d = length(gl_PointCoord - 0.5); if (vA >= 1.0) discard;
+  gl_FragColor = vec4(vec3(0.72, 0.66, 0.58), smoothstep(0.5, 0.1, d) * (1.0 - vA) * 0.9); }`,
+    });
+    const pts = new THREE.Points(geo, mat);
+    pts.frustumCulled = false;
+    G.intake = { pts, pos, age, next: 0, seen: new Set(), vel: new Float32Array(INTAKE_N * 3) };
+    return pts;
+}
+
+function spawnIntake(c, r) {
+    const I = G.intake;
+    if (!I) return;
+    for (let k = 0; k < 22; k++) {
+        const i = I.next; I.next = (I.next + 1) % INTAKE_N;
+        I.pos[i * 3] = c + 0.1 + Math.random() * 0.8;
+        I.pos[i * 3 + 1] = 0.01 + Math.random() * 0.03;
+        I.pos[i * 3 + 2] = r + 0.1 + Math.random() * 0.8;
+        I.vel[i * 3] = (Math.random() - 0.5) * 0.6;
+        I.vel[i * 3 + 1] = Math.random() * 0.5;
+        I.vel[i * 3 + 2] = (Math.random() - 0.5) * 0.6;
+        I.age[i] = Math.random() * 0.15;
+    }
+}
+
+function updateIntake(view, dt) {
+    const I = G.intake;
+    if (!I) return;
+    // new tiles in the fade list start a puff
+    const fades = typeof tileCleanFade !== 'undefined' ? tileCleanFade : null;
+    const now = new Set();
+    if (fades) {
+        for (const key in fades) {
+            now.add(key);
+            if (!I.seen.has(key)) {
+                const [c, r] = key.split(',').map(Number);
+                spawnIntake(c, r);
+            }
+        }
+    }
+    I.seen = now;
+    // particles are pulled under the vacuum's front edge
+    const tx = view.camX + Math.cos(view.angle) * 0.05, tz = view.camY + Math.sin(view.angle) * 0.05;
+    let any = false;
+    for (let i = 0; i < INTAKE_N; i++) {
+        if (I.age[i] >= 1) continue;
+        any = true;
+        I.age[i] += dt * 1.8;
+        const pull = Math.min(1, dt * (3 + I.age[i] * 9));
+        I.vel[i * 3 + 1] -= dt * 1.5;
+        I.pos[i * 3] += I.vel[i * 3] * dt + (tx - I.pos[i * 3]) * pull;
+        I.pos[i * 3 + 1] = Math.max(0.005, I.pos[i * 3 + 1] + I.vel[i * 3 + 1] * dt + (0.03 - I.pos[i * 3 + 1]) * pull);
+        I.pos[i * 3 + 2] += I.vel[i * 3 + 2] * dt + (tz - I.pos[i * 3 + 2]) * pull;
+    }
+    if (any) {
+        I.pts.geometry.attributes.position.needsUpdate = true;
+        I.pts.geometry.attributes.age.needsUpdate = true;
+    }
+}
+
+// --- A flying saucer that drifts past the window now and then -------------------------------------
+
+function buildSaucer(theme) {
+    const g = new THREE.Group();
+    const hull = new THREE.MeshPhysicalMaterial({ color: '#D8DDE3', metalness: 1, roughness: 0.25 });
+    const disc = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 12), hull);
+    disc.scale.set(1.6, 0.28, 1.6);
+    const dome = new THREE.Mesh(new THREE.SphereGeometry(0.55, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshPhysicalMaterial({ color: '#9FD8FF', transparent: true, opacity: 0.5, roughness: 0.05, metalness: 0 }));
+    dome.position.y = 0.2;
+    g.add(disc, dome);
+    const lightMat = new THREE.MeshPhysicalMaterial({ color: '#F4A261', emissive: theme.time === 'night' ? '#7FE0D8' : '#F4A261', emissiveIntensity: 3 });
+    for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2;
+        const b = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), lightMat);
+        b.position.set(Math.cos(a) * 1.2, -0.12, Math.sin(a) * 1.2);
+        g.add(b);
+    }
+    g.position.set(8, 8, -16);
+    G.saucer = g;
+    return g;
+}
+
+function updateSaucer() {
+    const s = G.saucer;
+    if (!s) return;
+    const t = G.time;
+    s.position.x = 1 + 14 * (0.5 + 0.5 * Math.sin(t * 0.045));
+    s.position.y = 7.6 + 0.5 * Math.sin(t * 0.8);
+    s.position.z = -15 - 3 * Math.cos(t * 0.045);
+    s.rotation.z = 0.12 * Math.cos(t * 0.045);
+    s.rotation.y += 0.02;
 }
 
 function buildFloor(theme) {
@@ -869,12 +991,16 @@ function buildScene(levelIndex) {
     sun.shadow.normalBias = 0.03;
     sun.shadow.radius = 3;
     scene.add(sun, sun.target);
-    const hemi = new THREE.HemisphereLight(new THREE.Color(theme.sky.zenith), new THREE.Color(theme.sky.ground).lerp(new THREE.Color(theme.walls), 0.5), theme.ambient * 0.9);
+    const hemi = new THREE.HemisphereLight(new THREE.Color(theme.sky.zenith), new THREE.Color(theme.sky.ground).lerp(new THREE.Color(theme.walls), 0.5), theme.ambient * 1.1);
     scene.add(hemi);
+    const bounce = new THREE.DirectionalLight(new THREE.Color(theme.walls).lerp(new THREE.Color(theme.sun.color), 0.4), theme.sun.intensity * 0.16);
+    bounce.position.set(COLS / 2 - sunDir[0] * 10, 3, ROWS / 2 - sunDir[2] * 10);
+    bounce.target.position.set(COLS / 2, 1.5, ROWS / 2);
+    scene.add(bounce, bounce.target);
     const lamp = new THREE.PointLight(new THREE.Color(theme.lamp.color), theme.lamp.on ? theme.lamp.intensity : 0, 16, 2);
     lamp.position.set(S3_LAMP.x, S3_WALL_H - 1.0, S3_LAMP.z);
     scene.add(lamp);
-    const dockLight = new THREE.PointLight(new THREE.Color('#4FA8FF'), 0.6, 4.5, 2);
+    const dockLight = new THREE.PointLight(new THREE.Color('#4FA8FF'), 0.3, 4.5, 2);
     dockLight.position.set(dock.pos[0], 0.5, dock.pos[2]);
     scene.add(dockLight);
     const vac = new THREE.PointLight(new THREE.Color('#1A9A8A'), 0.35, 3.2, 2);
@@ -902,10 +1028,15 @@ function buildScene(levelIndex) {
     G.mirrorTarget = G.mirrorTarget || new THREE.WebGLRenderTarget(320, 240, { type: THREE.HalfFloatType });
     G.mirrorCamera = G.mirrorCamera || new THREE.PerspectiveCamera();
 
-    // Dust motes in the window light, crumbs on the dirty tiles, the beam of sun itself
-    scene.add(buildMotes(theme));
+    // Crumbs on the dirty tiles and the saucer are solid; the beam, motes and intake dust are
+    // translucent effects that live in their own scene so the AO and focus passes ignore them
     scene.add(buildDebris(theme));
-    scene.add(buildSunBeam(theme));
+    if (s3Outside(theme).saucer) scene.add(buildSaucer(theme)); else G.saucer = null;
+    const fx = new THREE.Scene();
+    fx.add(buildMotes(theme));
+    fx.add(buildSunBeam(theme));
+    fx.add(buildIntake());
+    G.fxScene = fx;
 
     // Image-based lighting from the room itself
     bakeEnvironment();
@@ -965,7 +1096,7 @@ void main() {
     float t = (0.0 - p.z) / max(0.05, -uSun.z);
     vec2 hit = vec2(p.x + uSun.x * t, p.y + uSun.y * t);
     float inside = step(uWin.x, hit.x) * step(hit.x, uWin.y) * step(uWin.z, hit.y) * step(hit.y, uWin.w);
-    vLit = 0.08 + inside * (0.6 + 0.4 * sin(uTime * 1.3 + seed * 50.0));
+    vLit = 0.06 + inside * (0.4 + 0.35 * sin(uTime * 1.3 + seed * 50.0));
     vec4 mv = modelViewMatrix * vec4(p, 1.0);
     gl_Position = projectionMatrix * mv;
     gl_PointSize = (1.2 + seed * 2.2) * uScale * 14.0 / max(0.5, -mv.z);
@@ -1032,6 +1163,9 @@ function buildComposer() {
     const composer = new EffectComposer(r);
     const renderPass = new RenderPass(G.scene, G.camera);
     composer.addPass(renderPass);
+    const fxPass = new RenderPass(G.fxScene, G.camera);
+    fxPass.clear = false;
+    composer.addPass(fxPass);
     const ao = new GTAOPass(G.scene, G.camera, size.x, size.y, { radius: 0.35, distanceExponent: 1.5, thickness: 0.6, scale: 1.1, samples: 12, distanceFallOff: 1, screenSpaceRadius: false });
     ao.output = GTAOPass.OUTPUT.Default;
     ao.blendIntensity = 0.85;
@@ -1048,25 +1182,47 @@ function buildComposer() {
     const smaa = new SMAAPass(size.x, size.y);
     composer.addPass(smaa);
     G.composer = composer;
-    G.passes = { renderPass, ao, bloom, dof, output, grade, smaa };
+    G.passes = { renderPass, fxPass, ao, bloom, dof, output, grade, smaa };
     applyPassToggles();
 }
 
 // --- Per-frame ---------------------------------------------------------------------------------------
 
-function setCameraPose(view, lean) {
+function setCameraPose(view, lean, dt, fly) {
     const cam = G.camera;
-    const a = view.angle;
+    // head turn eases towards where the drag left it, and back to straight ahead once moving
+    if (view.moving || view.ghost) { look.tx *= Math.max(0, 1 - dt * 4); look.ty *= Math.max(0, 1 - dt * 4); }
+    look.yaw += (look.tx - look.yaw) * Math.min(1, dt * 9);
+    look.pitch += (look.ty - look.pitch) * Math.min(1, dt * 9);
+    const a = view.angle + look.yaw;
+    const p = look.pitch;
     const bobT = G.time;
     const bobX = view.moving ? Math.cos(bobT * 7) * 0.006 : 0;
     const bobY = view.moving ? Math.sin(bobT * 14) * 0.008 : Math.sin(bobT * 1.2) * 0.0025;
     cam.position.set(view.camX + Math.cos(a + Math.PI / 2) * bobX, S3_EYE + bobY, view.camY + Math.sin(a + Math.PI / 2) * bobX);
-    tmpV.set(cam.position.x + Math.cos(a), cam.position.y - 0.02 + (view.moving ? 0 : 0), cam.position.z + Math.sin(a));
-    cam.up.set(Math.sin(lean) , Math.cos(lean), 0);
-    cam.lookAt(tmpV);
+    tmpV.set(cam.position.x + Math.cos(a) * Math.cos(p), cam.position.y - 0.02 + Math.sin(p), cam.position.z + Math.sin(a) * Math.cos(p));
     cam.up.set(0, 1, 0);
-    // bank into the turn
-    cam.rotateZ(lean);
+    cam.lookAt(tmpV);
+    cam.rotateZ(lean); // bank into the turn
+    if (fly > 0) applyFlight(cam, fly);
+}
+
+// The dive: blend the eye pose with a shot from straight above that frames the board
+function applyFlight(cam, fly) {
+    eyePos.copy(cam.position);
+    eyeQ.copy(cam.quaternion);
+    const top = s3TopDownCamera(cam.fov, cam.aspect);
+    cam.position.set(top.x, top.y, top.z);
+    cam.up.set(0, 0, -1);
+    cam.lookAt(top.x, 0, top.z);
+    cam.up.set(0, 1, 0);
+    topQ.copy(cam.quaternion);
+    topPos.copy(cam.position);
+    // ease the height more than the glide so the camera swoops rather than slides
+    const k = fly;
+    cam.position.lerpVectors(eyePos, topPos, k);
+    cam.position.y = eyePos.y + (topPos.y - eyePos.y) * k * k;
+    cam.quaternion.slerpQuaternions(eyeQ, topQ, k);
 }
 
 function renderMirror() {
@@ -1097,8 +1253,6 @@ function renderMirror() {
     const wasBody = G.body.visible;
     G.body.visible = false;
     if (floor) floor.visible = false;
-    if (G.motes) G.motes.visible = false;
-    if (G.beam) G.beam.visible = false;
     const prevShadow = r.shadowMap.autoUpdate;
     r.shadowMap.autoUpdate = false;
     r.setRenderTarget(G.mirrorTarget);
@@ -1107,8 +1261,6 @@ function renderMirror() {
     r.setRenderTarget(prevTarget);
     r.shadowMap.autoUpdate = prevShadow;
     if (floor) floor.visible = true;
-    if (G.motes) G.motes.visible = true;
-    if (G.beam) G.beam.visible = true;
     G.body.visible = wasBody;
     shader.uniforms.tReflect.value = G.mirrorTarget.texture;
     shader.uniforms.uReflectStrength.value = 1;
@@ -1132,12 +1284,14 @@ function aheadDistance(view) {
     return 15;
 }
 
-function render(view, dtMs) {
+function render(view, dtMs, fly) {
     if (!G.ready) return null;
+    if (!Number.isFinite(view.camX) || !Number.isFinite(view.camY) || !Number.isFinite(view.angle)) return G.canvas; // a bad pose: keep the last frame
+    fly = fly || 0;
     if (G.level !== currentLevel || !G.scene) {
         buildScene(currentLevel);
         if (!G.composer) buildComposer();
-        else { G.passes.renderPass.scene = G.scene; G.passes.ao.scene = G.scene; G.passes.dof.scene = G.scene; }
+        else { G.passes.renderPass.scene = G.scene; G.passes.fxPass.scene = G.fxScene; G.passes.ao.scene = G.scene; G.passes.dof.scene = G.scene; }
     }
     const dt = Math.min(0.1, (dtMs || 16) / 1000);
     G.time += dt;
@@ -1152,9 +1306,12 @@ function render(view, dtMs) {
     while (dA < -Math.PI) dA += Math.PI * 2;
     G.lastAngle = view.angle;
     const turnRate = dA / Math.max(0.004, dt);
-    G.lean += (-turnRate * 0.035 - G.lean) * Math.min(1, dt * 8);
-    G.turnBlur += (Math.min(0.012, Math.abs(turnRate) * 0.0025) - G.turnBlur) * Math.min(1, dt * 10);
-    setCameraPose(view, G.lean);
+    const leanTarget = Math.max(-0.07, Math.min(0.07, -turnRate * 0.012));
+    G.lean += (leanTarget - G.lean) * Math.min(1, dt * 8);
+    G.turnBlur += (Math.min(0.006, Math.abs(turnRate) * 0.0018) - G.turnBlur) * Math.min(1, dt * 10);
+    setCameraPose(view, G.lean, dt, fly);
+    updateIntake(view, dt);
+    updateSaucer();
 
     // Lights that follow the vacuum
     const glow = hexRgb(view.glow);
@@ -1175,8 +1332,14 @@ function render(view, dtMs) {
     } else {
         G.body.userData.lensMat.emissiveIntensity = 0;
     }
-    G.body.visible = !view.ghost;
-    G.vacModel.visible = !!view.ghost;
+    G.body.visible = !view.ghost && fly < 0.02;
+    G.vacModel.visible = !!view.ghost || fly >= 0.02;
+    if (fly >= 0.02 && !view.ghost) {
+        G.vacModel.position.set(view.camX, 0, view.camY);
+        G.vacModel.rotation.y = -view.angle;
+        G.vacModel.userData.ringMat.color.copy(glow);
+        G.vacModel.userData.ringMat.emissive.copy(glow);
+    }
     if (view.ghost) {
         G.vacModel.position.set(roomba.drawX / TILE, 0, roomba.drawY / TILE);
         G.vacModel.rotation.y = -fpAngle;
@@ -1188,14 +1351,14 @@ function render(view, dtMs) {
     const cloud = 0.86 + 0.14 * (0.5 + 0.5 * Math.sin(G.time * 0.11) * Math.sin(G.time * 0.047 + 1.7));
     G.lights.sun.intensity = G.lights.baseSun * cloud;
     G.lights.lamp.intensity = G.lights.baseLamp * (0.96 + 0.04 * Math.sin(G.time * 9.1) * Math.sin(G.time * 3.3));
-    G.lights.dockLight.intensity = 0.5 + 0.2 * Math.sin(G.time * 2.4);
+    G.lights.dockLight.intensity = 0.26 + 0.1 * Math.sin(G.time * 2.4);
     if (G.motes) { G.motes.material.uniforms.uTime.value = G.time; G.motes.material.uniforms.uScale.value = G.basePixelRatio * q.scale * G.scale; }
-    if (G.beam) { G.beam.material.uniforms.uTime.value = G.time; G.beam.material.uniforms.uStrength.value = (theme.time === 'night' ? 0.05 : 0.16) * cloud; }
+    if (G.beam) { G.beam.material.uniforms.uTime.value = G.time; G.beam.material.uniforms.uStrength.value = (theme.time === 'night' ? 0.08 : 0.36) * cloud; }
 
     // Tagged animations
     const T = G.tagged;
     if (T.blink) for (const m of T.blink) m.material.emissiveIntensity = (Math.sin(G.time * 3) > 0.6) ? 4 : 0.3;
-    if (T.dockRing) for (const m of T.dockRing) m.material.emissiveIntensity = 0.9 + 0.5 * Math.sin(G.time * 2.4);
+    if (T.dockRing) for (const m of T.dockRing) m.material.emissiveIntensity = 0.5 + 0.25 * Math.sin(G.time * 2.4);
     if (T.cat) for (const m of T.cat) m.scale.y = m.userData.base.sy * (1 + 0.045 * Math.sin(G.time * 1.9));
     if (T.catHead) for (const m of T.catHead) m.position.y = m.userData.base.y + 0.012 * Math.sin(G.time * 1.9);
     if (T.slat) T.slat.forEach((m, i) => { m.rotation.x = m.userData.base.rx + 0.02 * Math.sin(G.time * 0.7 + i * 0.3); });
@@ -1230,12 +1393,12 @@ function render(view, dtMs) {
     // Exposure: facing the window brightens the frame, then the eye settles
     const toWindow = Math.cos(view.angle + Math.PI / 2); // 1 when facing north
     const windowWeight = Math.max(0, toWindow) * Math.max(0, 1 - Math.abs(view.camX - (S3_WINDOW.x0 + S3_WINDOW.x1) / 2) / 9) * Math.max(0, 1 - view.camY / 12);
-    const targetExposure = (theme.time === 'night' ? 1.25 : 1.0) - windowWeight * 0.28 - (flashOn ? 0.18 : 0);
-    G.exposure += (targetExposure - G.exposure) * Math.min(1, dt * 1.6);
+    const targetExposure = (theme.time === 'night' ? 1.12 : 1.14) - windowWeight * 0.3 - (flashOn ? 0.18 : 0) - fly * 0.42;
+    G.exposure += (targetExposure - G.exposure) * Math.min(1, dt * (fly > 0 ? 6 : 2.2));
     G.renderer.toneMappingExposure = G.exposure;
 
-    // Focus follows what is ahead
-    const want = Math.min(10, aheadDistance(view));
+    // Focus follows what is ahead (and the whole room while flying)
+    const want = fly > 0.02 ? 12 : Math.min(10, aheadDistance(view));
     G.focus += (want - G.focus) * Math.min(1, dt * 3);
     if (G.passes.dof) { G.passes.dof.uniforms.focus.value = G.focus; G.passes.dof.uniforms.aperture.value = 0.0012 / Math.max(1, G.focus * 0.5); }
     if (G.passes.grade) {
@@ -1244,10 +1407,13 @@ function render(view, dtMs) {
         G.passes.grade.uniforms.uWarm.value.set(theme.time === 'night' ? 0.94 : 1.03, 1.0, theme.time === 'night' ? 1.08 : 0.96);
     }
 
-    renderMirror();
     const t0 = performance.now();
+    renderMirror();
     G.composer.render();
-    adapt(performance.now() - t0, dtMs);
+    const cpu = performance.now() - t0;
+    G.perf.cpuMs += (cpu - G.perf.cpuMs) * 0.1;
+    if (dtMs > 0 && dtMs < 120) G.perf.dtMs += (dtMs - G.perf.dtMs) * 0.1;
+    adapt(cpu, dtMs);
     return G.canvas;
 }
 
@@ -1283,9 +1449,10 @@ function warm() {
         if (G.level !== currentLevel || !G.scene) {
             buildScene(currentLevel);
             if (!G.composer) buildComposer();
-            else { G.passes.renderPass.scene = G.scene; G.passes.ao.scene = G.scene; G.passes.dof.scene = G.scene; }
+            else { G.passes.renderPass.scene = G.scene; G.passes.fxPass.scene = G.fxScene; G.passes.ao.scene = G.scene; G.passes.dof.scene = G.scene; }
         }
         G.renderer.compile(G.scene, G.camera);
+        G.renderer.compile(G.fxScene, G.camera);
     } catch (e) {
         console.warn('3D warm-up failed', e);
     }
@@ -1309,6 +1476,8 @@ window.gl3d = {
     get scale() { return G.scale; },
     render,
     warm,
+    lookDrag,
+    lookRelease,
     setQuality,
     setDensity,
     invalidate() { G.level = -1; },

@@ -1,5 +1,8 @@
 # 3D mode: the road to "visually stunning"
 
+> Status: built on 2026-11-08, all six sprints, in a 1950s atomic-age style. See the matching
+> section of `changes-2026-11-07.md` for what landed and what was not verified.
+
 Date: 2026-11-08. An independent look at the first-person view after the glow-up, judged against the standard of a top-tier 3D title, with the brief that gameplay stays exactly as it is and the 3D view is about beauty rather than puzzle solving.
 
 ## Where it stands

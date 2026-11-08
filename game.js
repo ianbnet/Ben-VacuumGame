@@ -5,6 +5,9 @@
 // === GAME STATE ===
 let canvas, ctx;
 let canvasDpr = 1; // device pixel ratio the canvas backing store is scaled by
+let lastInputAt = 0; // when the player last pressed or dragged anything (the 3D HUD fades when idle)
+let lookDragged = false; // the current pointer gesture was a look-around drag, not a click
+let glFailures = 0; // frames the GPU renderer has thrown on; three in a row and Classic takes over
 let fullscreenFallback = false; // full-screen layout without the browser API (iPhone Safari)
 let fullscreenTimer = null;
 let resizeTimer = null;
@@ -352,6 +355,8 @@ function handleDirection(dir) {
 
 // === PRESS AND HOLD ===
 function startHold(dir) {
+    lastInputAt = performance.now();
+    if (useGl()) window.gl3d.lookRelease(true);
     if (heldDir === dir) return;
     stopHold();
     heldDir = dir;
@@ -448,12 +453,17 @@ function renderFirstPersonAny(view) {
     if (!fp3d) initFirstPerson(); // the view model and HUD live in render3d.js
     view = view || fpPlayerView();
     let frame = null;
+    const fly = typeof fpDiveFly === 'function' ? fpDiveFly() : 0;
     try {
-        frame = window.gl3d.render(view, dtMs);
+        frame = window.gl3d.render(view, dtMs, fly);
     } catch (e) {
-        console.warn('GPU renderer failed, switching to Classic', e);
-        design.renderer = 'classic';
-        if (typeof updateDesignUI === 'function') updateDesignUI();
+        glFailures++;
+        console.warn(`GPU renderer frame failed (${glFailures})`, e);
+        if (glFailures >= 3) {
+            console.warn('GPU renderer keeps failing, switching to Classic for this session');
+            design.renderer = 'classic';
+            if (typeof updateDesignUI === 'function') updateDesignUI();
+        }
     }
     if (!frame) {
         renderFirstPerson(view);
@@ -473,7 +483,10 @@ function renderFirstPersonAny(view) {
         ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
         ctx.restore();
     }
-    fpDrawHud(view, false);
+    if (fly < 0.02) {
+        if (typeof fpDrawHudGl === 'function') fpDrawHudGl(view);
+        else fpDrawHud(view, false);
+    }
 }
 
 // Pre-build whatever the active 3D renderer needs so the first 3D frame is instant
@@ -561,6 +574,7 @@ function keyIsForPanel(e) {
 
 document.addEventListener('keydown', (e) => {
     if (keyIsForPanel(e)) return;
+    lastInputAt = performance.now();
 
     // F: flashlight on / off
     if (e.key === 'f' || e.key === 'F') {
@@ -811,7 +825,7 @@ function render(timestamp) {
     requestAnimationFrame(render);
 }
 
-function renderFrame(timestamp) {
+function renderFrame(timestamp = performance.now()) {
     if (!lastFrameTime) lastFrameTime = timestamp;
     dtMs = Math.min(100, Math.max(0, timestamp - lastFrameTime)); // clamp so a hidden tab doesn't jump
     lastFrameTime = timestamp;
@@ -972,12 +986,44 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Canvas click: close help, or go to the next level
     canvas.addEventListener('click', () => {
+        if (lookDragged) return; // a drag to look around is not a click
         if (helpVisible) {
             toggleHelp();
         } else if (gameState === 'LEVEL_COMPLETE') {
             nextLevel();
         }
     });
+
+    // Drag on the board in 3D to look around; the view eases back when you drive
+    let lookPointer = null;
+    canvas.addEventListener('pointerdown', (e) => {
+        if (viewMode !== 'FP' || !useGl()) return;
+        lookPointer = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: 0 };
+        lookDragged = false;
+        lastInputAt = performance.now();
+    });
+    canvas.addEventListener('pointermove', (e) => {
+        if (!lookPointer || e.pointerId !== lookPointer.id) return;
+        const dx = e.clientX - lookPointer.x, dy = e.clientY - lookPointer.y;
+        lookPointer.x = e.clientX; lookPointer.y = e.clientY;
+        lookPointer.moved += Math.abs(dx) + Math.abs(dy);
+        if (lookPointer.moved > 6) {
+            lookDragged = true;
+            const scale = CANVAS_W / (canvas.getBoundingClientRect().width || CANVAS_W);
+            window.gl3d.lookDrag(dx * scale, dy * scale);
+            lastInputAt = performance.now();
+            e.preventDefault();
+        }
+    });
+    const endLook = (e) => {
+        if (!lookPointer || (e && e.pointerId !== lookPointer.id)) return;
+        lookPointer = null;
+        if (useGl()) window.gl3d.lookRelease(false);
+        setTimeout(() => { lookDragged = false; }, 0);
+    };
+    canvas.addEventListener('pointerup', endLook);
+    canvas.addEventListener('pointercancel', endLook);
+    canvas.addEventListener('pointerleave', endLook);
 
     loadProgress();
     if (typeof designLoad === 'function') {
