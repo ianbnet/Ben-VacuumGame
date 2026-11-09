@@ -1023,6 +1023,20 @@ function buildScene(levelIndex) {
     G.vacModel = buildVacuumModel();
     G.vacModel.visible = false;
     scene.add(G.vacModel);
+    // The ghost of the player's best run: the same vacuum, see-through, with a gold ring
+    G.bestModel = buildVacuumModel();
+    G.bestModel.traverse((m) => {
+        if (!m.isMesh) return;
+        m.material.transparent = true;
+        m.material.opacity = 0.4;
+        m.material.depthWrite = false;
+        m.castShadow = false;
+    });
+    G.bestModel.userData.ringMat.color.set('#D9A441');
+    G.bestModel.userData.ringMat.emissive.set('#D9A441');
+    G.bestModel.userData.ringMat.opacity = 0.9;
+    G.bestModel.visible = false;
+    scene.add(G.bestModel);
 
     // Mirror camera for the floor's reflection
     G.mirrorTarget = G.mirrorTarget || new THREE.WebGLRenderTarget(320, 240, { type: THREE.HalfFloatType });
@@ -1339,6 +1353,11 @@ function render(view, dtMs, fly) {
         G.vacModel.rotation.y = -view.angle;
         G.vacModel.userData.ringMat.color.copy(glow);
         G.vacModel.userData.ringMat.emissive.copy(glow);
+    }
+    G.bestModel.visible = !!view.best && !view.ghost;
+    if (view.best) {
+        G.bestModel.position.set(view.best.x, 0, view.best.y);
+        G.bestModel.rotation.y = -view.best.angle;
     }
     if (view.ghost) {
         G.vacModel.position.set(roomba.drawX / TILE, 0, roomba.drawY / TILE);

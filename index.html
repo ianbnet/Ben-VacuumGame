@@ -10,6 +10,43 @@
 <body>
     <div id="gameContainer">
         <h1 id="gameTitle">Roomba Vacuum</h1>
+        <div id="modeBar">
+            <div class="mode-tabs" role="group" aria-label="What to play">
+                <button class="mode-tab current" id="tabHouse" aria-pressed="true">The House</button>
+                <button class="mode-tab" id="tabDaily" aria-pressed="false">Room of the Day</button>
+                <button class="mode-tab" id="tabBuild" aria-pressed="false">Build a Room</button>
+                <label class="switch mode-switch" title="B"><input type="checkbox" id="raceBestToggle" checked><span class="track" aria-hidden="true"></span><span>Race my best</span></label>
+            </div>
+            <div class="mode-context" id="ctxHouse">
+                <div id="levelSelect" role="group" aria-label="Level select"></div>
+            </div>
+            <div class="mode-context" id="ctxDaily" hidden>
+                <button class="action-btn action-btn-quiet" id="dailyPrev" aria-label="Earlier day">&#9664;</button>
+                <span id="dailyLabel" class="mode-label">--</span>
+                <button class="action-btn action-btn-quiet" id="dailyNext" aria-label="Later day">&#9654;</button>
+                <button class="action-btn action-btn-quiet" id="dailyToday">Today</button>
+                <span id="dailyBest" class="mode-note"></span>
+            </div>
+            <div class="mode-context" id="ctxBuild" hidden>
+                <div class="build-row">
+                    <select id="roomSelect" class="room-select" aria-label="My rooms"></select>
+                    <button class="action-btn action-btn-quiet" id="roomNew">New room</button>
+                    <input id="roomName" type="text" maxlength="28" aria-label="Room name" placeholder="Room name">
+                    <label class="design-select"><span class="field-label">Theme</span><select id="roomTheme" aria-label="Theme"></select></label>
+                    <label class="design-select"><span class="field-label">Battery</span><select id="roomBattery" aria-label="Battery difficulty"><option value="1">Easy</option><option value="2">Medium</option><option value="3">Hard</option></select></label>
+                </div>
+                <div class="build-row" id="buildTools" role="group" aria-label="Pieces"></div>
+                <div class="build-row">
+                    <button class="action-btn" id="roomPlay">Play it</button>
+                    <button class="action-btn" id="roomEdit" hidden>Edit</button>
+                    <button class="action-btn action-btn-quiet" id="roomKeep" hidden>Keep this room</button>
+                    <button class="action-btn action-btn-quiet" id="roomShare">Copy link</button>
+                    <button class="action-btn action-btn-quiet" id="roomDelete">Delete</button>
+                    <span id="buildStatus" class="mode-note" role="status"></span>
+                </div>
+                <input id="roomLink" type="text" readonly hidden aria-label="Link to this room">
+            </div>
+        </div>
         <canvas id="gameCanvas" width="720" height="576" role="img" aria-label="Game board"></canvas>
         <div id="sidePanel">
         <div id="controlPanel">
@@ -29,6 +66,10 @@
                 <div class="stat">
                     <span class="stat-label">Dock</span>
                     <span id="dockDist" class="stat-value">--</span>
+                </div>
+                <div class="stat" id="bestStat" hidden>
+                    <span class="stat-label">Vs your best</span>
+                    <span id="bestDelta" class="stat-value">--</span>
                 </div>
             </div>
             <div id="dpadContainer">
@@ -100,12 +141,12 @@
                 </div>
             </div>
         </div>
-        <div id="legend">Arrows / WASD move (hold to keep going) &middot; V 3D view &middot; Enter full screen &middot; G ghost &middot; F flashlight &middot; U upgrades &middot; R restart &middot; Space next level &middot; M sound &middot; H help</div>
-        <div id="levelSelect" role="group" aria-label="Level select"></div>
+        <div id="legend">Arrows / WASD move (hold to keep going) &middot; V 3D view &middot; Enter full screen &middot; G par ghost &middot; B race my best &middot; F flashlight &middot; U upgrades &middot; R restart &middot; Space next level &middot; M sound &middot; H help</div>
         </div>
         <div id="srStatus" class="visually-hidden" aria-live="polite"></div>
     </div>
     <script src="core.js"></script>
+    <script src="rooms.js"></script>
     <script src="upgrades.js"></script>
     <script src="design.js"></script>
     <script src="scene3d.js"></script>
@@ -115,6 +156,7 @@
     <script src="hud3d.js"></script>
     <script src="audio.js"></script>
     <script src="game.js"></script>
+    <script src="modes.js"></script>
     <script type="module" src="render3d-gl.js"></script>
 </body>
 </html>

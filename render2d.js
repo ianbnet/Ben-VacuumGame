@@ -1105,7 +1105,7 @@ function drawNpcTrail() {
     }
 }
 
-// A hologram of the same saucer in cyan
+// The par ghost: a hologram of the same saucer in cyan
 function drawNpcVacuum() {
     const targetX = npcReplay.col * TILE + TILE / 2;
     const targetY = npcReplay.row * TILE + TILE / 2;
@@ -1114,32 +1114,46 @@ function drawNpcVacuum() {
     npcReplay.drawY += (targetY - npcReplay.drawY) * npcLerp;
     if (Math.abs(targetX - npcReplay.drawX) < 0.5) npcReplay.drawX = targetX;
     if (Math.abs(targetY - npcReplay.drawY) < 0.5) npcReplay.drawY = targetY;
+    drawHologramVacuum(npcReplay.drawX, npcReplay.drawY, npcReplay.dir, [0, 191, 255], 1);
+}
 
-    const x = npcReplay.drawX, y = npcReplay.drawY;
+// The ghost of the player's best run in this room, in gold, a step for each of the player's.
+// It fades once its run is over, so a finished ghost never hides the tiles it stopped on.
+function drawBestGhost() {
+    if (!bestGhost) return;
+    drawHologramVacuum(bestGhost.drawX, bestGhost.drawY, bestGhost.dir, [217, 164, 65], bestGhost.done ? 0.45 : 0.85);
+}
+
+// A see-through vacuum made of light: rings, scanlines, a direction wedge, fin and lens
+function drawHologramVacuum(x, y, dir, rgb, strength) {
     const r = 19;
-    const angle = FP_ANGLE_MAP[npcReplay.dir];
+    const angle = FP_ANGLE_MAP[dir];
     const pulse = 0.7 + 0.3 * Math.sin(chargerPulse * 0.1);
     const flicker = 0.85 + 0.15 * Math.sin(chargerPulse * 0.9);
+    const [cr, cg, cb] = rgb;
+    const lr = Math.round(cr + (255 - cr) * 0.55), lg = Math.round(cg + (255 - cg) * 0.55), lb = Math.round(cb + (255 - cb) * 0.55);
+    const main = (a) => `rgba(${cr}, ${cg}, ${cb}, ${a})`;
+    const light = (a) => `rgba(${lr}, ${lg}, ${lb}, ${a})`;
 
     ctx.save();
     ctx.translate(x, y);
-    ctx.globalAlpha = flicker;
-    ctx.shadowColor = '#00BFFF';
+    ctx.globalAlpha = flicker * strength;
+    ctx.shadowColor = main(1);
     ctx.shadowBlur = 22 * pulse * canvasDpr;
     const body = ctx.createRadialGradient(-3, -3, 0, 0, 0, r);
-    body.addColorStop(0, 'rgba(40, 80, 110, 0.75)');
-    body.addColorStop(0.6, 'rgba(10, 30, 50, 0.7)');
+    body.addColorStop(0, `rgba(${Math.round(cr * 0.3 + 30)}, ${Math.round(cg * 0.3 + 40)}, ${Math.round(cb * 0.3 + 40)}, 0.75)`);
+    body.addColorStop(0.6, 'rgba(12, 28, 40, 0.7)');
     body.addColorStop(1, 'rgba(5, 14, 24, 0.8)');
     ctx.fillStyle = body;
     ctx.beginPath();
     ctx.arc(0, 0, r, 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = `rgba(0, 191, 255, ${0.7 + 0.3 * pulse})`;
+    ctx.strokeStyle = main(0.7 + 0.3 * pulse);
     ctx.lineWidth = 2.2;
     ctx.beginPath();
     ctx.arc(0, 0, r, 0, Math.PI * 2);
     ctx.stroke();
-    ctx.strokeStyle = `rgba(0, 230, 255, ${0.5 + 0.3 * pulse})`;
+    ctx.strokeStyle = light(0.5 + 0.3 * pulse);
     ctx.lineWidth = 1.4;
     ctx.beginPath();
     ctx.arc(0, 0, r - 6, 0, Math.PI * 2);
@@ -1150,7 +1164,7 @@ function drawNpcVacuum() {
     ctx.beginPath();
     ctx.arc(0, 0, r - 1, 0, Math.PI * 2);
     ctx.clip();
-    ctx.strokeStyle = 'rgba(0, 220, 255, 0.14)';
+    ctx.strokeStyle = light(0.14);
     ctx.lineWidth = 1;
     for (let sy = -r; sy < r; sy += 3) {
         ctx.beginPath();
@@ -1160,7 +1174,7 @@ function drawNpcVacuum() {
     }
     ctx.restore();
     // direction wedge, fin and lens
-    ctx.fillStyle = `rgba(0, 191, 255, ${0.45 + 0.2 * pulse})`;
+    ctx.fillStyle = main(0.45 + 0.2 * pulse);
     ctx.beginPath();
     ctx.arc(0, 0, r - 7, angle - 0.42, angle + 0.42);
     ctx.lineTo(0, 0);
@@ -1168,7 +1182,7 @@ function drawNpcVacuum() {
     ctx.fill();
     ctx.save();
     ctx.rotate(angle);
-    ctx.fillStyle = 'rgba(160, 230, 255, 0.7)';
+    ctx.fillStyle = light(0.7);
     ctx.beginPath();
     ctx.moveTo(-r + 1, 0);
     ctx.lineTo(-r + 10, -2.2);
@@ -1180,12 +1194,12 @@ function drawNpcVacuum() {
     ctx.fill();
     ctx.restore();
     // centre light
-    ctx.shadowColor = '#00FFFF';
+    ctx.shadowColor = light(1);
     ctx.shadowBlur = 10 * pulse * canvasDpr;
     const led = ctx.createRadialGradient(0, 0, 0, 0, 0, 5);
-    led.addColorStop(0, '#DFFFFF');
-    led.addColorStop(0.5, '#00BFFF');
-    led.addColorStop(1, '#0066CC');
+    led.addColorStop(0, '#FFFFFF');
+    led.addColorStop(0.5, main(1));
+    led.addColorStop(1, `rgba(${Math.round(cr * 0.5)}, ${Math.round(cg * 0.5)}, ${Math.round(cb * 0.5)}, 1)`);
     ctx.fillStyle = led;
     ctx.beginPath();
     ctx.arc(0, 0, 4, 0, Math.PI * 2);
@@ -1287,17 +1301,34 @@ function drawOverlay() {
         uiText(`Moves ${r.moves}   ·   Par ${r.par}   ·   ${parText}`, cx, cy - 14, 19, UI.cream, 'center', '400');
         uiText(`Tiles ${r.tileScore}  +  Bonus ${r.bonus}  =  ${score} total`, cx, cy + 16, 16, 'rgba(242, 232, 213, 0.8)', 'center', '400');
 
-        const earned = r.points | 0;
-        const available = progress.points | 0;
-        uiText(
-            earned > 0
-                ? `+${earned} UPGRADE POINT${earned === 1 ? '' : 'S'}   ·   ${available} TO SPEND (U)`
-                : `NO NEW STARS, NO UPGRADE POINTS   ·   ${available} TO SPEND (U)`,
-            cx, cy + 46, 11, earned > 0 ? UI.mustard : 'rgba(242, 232, 213, 0.5)', 'center', '600', 1.5,
-        );
-        uiText('G: watch the ghost run the par route', cx, cy + 74, 14, '#7FD6FF', 'center', '400');
+        const dim = 'rgba(242, 232, 213, 0.5)';
+        if (roomMode === 'house') {
+            const earned = r.points | 0;
+            const available = progress.points | 0;
+            uiText(
+                earned > 0
+                    ? `+${earned} UPGRADE POINT${earned === 1 ? '' : 'S'}   ·   ${available} TO SPEND (U)`
+                    : `NO NEW STARS, NO UPGRADE POINTS   ·   ${available} TO SPEND (U)`,
+                cx, cy + 46, 11, earned > 0 ? UI.mustard : dim, 'center', '600', 1.5,
+            );
+        } else {
+            const run = progress.runs[roomKey()];
+            uiText(
+                r.newBest
+                    ? (r.prevMoves ? `NEW BEST   ·   ${r.prevMoves - r.moves} FEWER MOVES THAN BEFORE` : 'FIRST RUN HERE   ·   SAVED AS YOUR BEST')
+                    : `YOUR BEST HERE IS ${run ? run.moves : r.moves} MOVES`,
+                cx, cy + 46, 11, r.newBest ? UI.mustard : dim, 'center', '600', 1.5,
+            );
+        }
+        if (r.newBest && progress.raceBest) uiText('Next time, the gold ghost drives this run. Race it.', cx, cy + 74, 14, UI.mustard, 'center', '400');
+        else uiText('G: watch the ghost run the par route', cx, cy + 74, 14, '#7FD6FF', 'center', '400');
 
-        if (currentLevel < LEVELS.length - 1) {
+        if (roomMode === 'daily') {
+            const today = typeof dateKeyOf === 'function' && dailyKey === dateKeyOf(new Date());
+            uiText(today ? 'R to play it again   ·   a new room arrives tomorrow' : 'R to play it again', cx, cy + 104, 16, UI.mint, 'center', '500');
+        } else if (roomMode === 'custom') {
+            uiText('R to play it again', cx, cy + 104, 16, UI.mint, 'center', '500');
+        } else if (currentLevel < HOUSE_LEVELS - 1) {
             uiText('SPACE or click the board for the next room', cx, cy + 104, 16, UI.mint, 'center', '500');
         } else {
             uiText('YOU WIN · EVERY ROOM IS CLEAN', cx, cy + 104, 20, UI.mustard, 'center', '600', 3);
@@ -1322,19 +1353,26 @@ function drawBanner() {
     const elapsed = BANNER_MS - bannerTimer;
     const alpha = Math.max(0, Math.min(1, elapsed / 250, bannerTimer / 500));
     const cx = CANVAS_W / 2;
-    const best = progress.best[currentLevel];
+    const house = roomMode === 'house';
+    const best = house ? progress.best[currentLevel] : progress.runs[roomKey()];
     const theme = s3Theme(currentLevel);
     const extra = [];
-    if (currentLevel === 0 && !best) extra.push('Clean every tile  ·  dock before the battery dies  ·  beat par');
+    if (house && currentLevel === 0 && !best) extra.push('Clean every tile  ·  dock before the battery dies  ·  beat par');
     if (best) extra.push(`Your best: ${best.moves} moves  ${'★'.repeat(best.stars)}   ·   Par ${parMoves}`);
-    const boxW = 440;
+    else if (!house) extra.push(`Par ${parMoves}`);
+    const boxW = house ? 440 : 500;
     const boxH = 92 + extra.length * 22;
     const y = 60;
 
     ctx.save();
     ctx.globalAlpha = alpha;
     drawCard(cx - boxW / 2, y, boxW, boxH, theme.accent.color);
-    uiText(`LEVEL ${currentLevel + 1} OF ${LEVELS.length}   ·   ${theme.name.toUpperCase()}   ·   ${theme.time.toUpperCase()}`, cx, y + 26, 10.5, UI.mustard, 'center', '600', 2.5);
+    const tag = roomMode === 'daily'
+        ? `ROOM OF THE DAY   ·   ${formatDateKey(dailyKey).toUpperCase()}   ·   ${theme.name.toUpperCase()}`
+        : roomMode === 'custom'
+            ? `BUILT ROOM   ·   ${theme.name.toUpperCase()}   ·   ${theme.time.toUpperCase()}`
+            : `LEVEL ${currentLevel + 1} OF ${HOUSE_LEVELS}   ·   ${theme.name.toUpperCase()}   ·   ${theme.time.toUpperCase()}`;
+    uiText(tag, cx, y + 26, 10.5, UI.mustard, 'center', '600', 2.5);
     uiText(bannerText, cx, y + 56, 30, UI.cream, 'center', '400', 1);
     extra.forEach((line, i) => uiText(line, cx, y + 86 + i * 22, 12.5, 'rgba(242, 232, 213, 0.75)', 'center', '400'));
     ctx.restore();
@@ -1346,15 +1384,15 @@ function drawHelp() {
         ['Goal', 'Clean every tile. The dock refills the battery. Finishing under par earns a bigger bonus.'],
         ['Move', 'Arrow keys or WASD. Hold a key to keep going. The on-screen d-pad works the same way.'],
         ['3D view', 'V or the 3D View button. In 3D, left and right turn in place; up and down drive forward and back.'],
-        ['Restart', 'R or the Restart button. Restarting a level also restarts its score.'],
-        ['Next level', 'SPACE, or click the board, once a level is complete.'],
-        ['Ghost', 'G or the Ghost button replays the par route at any time; V rides along in 3D. SPACE or G ends it.'],
-        ['Upgrades', 'Each new star on a level is a point. U or the Upgrades button spends them on the vacuum or the charger.'],
-        ['Flashlight', 'F switches the vacuum\'s flashlight on and off. It lights the way ahead in both views.'],
-        ['Design', 'The Design button opens colour wheels for the vacuum\'s lights and the flashlight.'],
+        ['Restart', 'R restarts the room and its score. SPACE, or a click on the board, goes to the next room when one is done.'],
+        ['Par ghost', 'G or the Ghost button replays the par route at any time; V rides along in 3D. SPACE or G ends it.'],
+        ['Race my best', 'Your best run in each room comes back as a gold ghost, one step for each of yours. B or the switch at the top hides it.'],
+        ['Room of the day', 'A new room every day, the same for everyone. The arrows at the top go back to earlier days.'],
+        ['Build a room', 'Place furniture, walls and the dock, pick a theme, then play it. Copy link sends your room to someone else.'],
+        ['Upgrades', 'Each new star on a house room is a point. U or the Upgrades button spends them on the vacuum or the charger.'],
+        ['Lights', 'F switches the flashlight on and off. The Design button opens colour wheels for the lights and the flashlight.'],
         ['Full screen', 'Enter or the Full screen button fills the screen with the game. Enter again or Escape leaves it.'],
-        ['Sound', 'M or the Sound button mutes and unmutes.'],
-        ['Help', 'H or ? shows this screen. Escape closes it.'],
+        ['Sound, help', 'M or the Sound button mutes and unmutes. H or ? shows this screen. Escape closes it.'],
     ];
     ctx.save();
     ctx.fillStyle = 'rgba(12, 18, 22, 0.86)';

@@ -21,7 +21,7 @@ let score = 0;
 let parMoves = 0;
 let parPath = []; // full path for NPC replay
 let parApproachLen = 0; // steps before NPC reaches charger and starts cleaning
-let gameState = 'PLAYING'; // PLAYING, LEVEL_COMPLETE, GAME_OVER, PAR_REPLAY
+let gameState = 'PLAYING'; // PLAYING, LEVEL_COMPLETE, GAME_OVER, PAR_REPLAY, EDITING
 let bumpFlash = 0;
 let chargerPulse = 0;
 let cleanAnimations = [];
@@ -38,9 +38,19 @@ let helpVisible = false;
 let chargerDistGrid = null; // BFS distance from every tile to the nearest charging tile, for the "dock N moves" hint
 let chargingPadGrid = null; // 1 where a tile charges the vacuum (the dock, plus its pad once upgraded)
 
+// Which rooms are being played: the six in the house, the room of the day, or one the player built
+let roomMode = 'house';   // 'house' | 'daily' | 'custom'
+let houseLevel = 0;       // the house room to come back to
+let dailyKey = '';        // the calendar day of the loaded room of the day
+let specialKey = '';      // what the loaded extra room's best run is saved under
+let runPath = '';         // this run's moves so far, one of U D L R each
+let bestGhost = null;     // the best recorded run in this room, replayed alongside the player
+
 // Saved progress (localStorage): highest level reached, best result per level, upgrade points and levels
 const SAVE_KEY = 'ben-vacuum-game.progress.v1';
-let progress = { unlocked: 0, best: {}, bestScore: 0, points: 0, upgrades: {} };
+let progress = { unlocked: 0, best: {}, bestScore: 0, points: 0, upgrades: {}, runs: {}, rooms: [], raceBest: true };
+const MAX_SAVED_ROOMS = 24;
+const MAX_DAILY_RUNS = 150;
 
 // === FIRST-PERSON MODE ===
 let viewMode = 'TD'; // 'TD' = top-down, 'FP' = first-person
@@ -137,6 +147,8 @@ function initLevel(levelIndex) {
     parApproachLen = parResult.approachLength;
     npcReplay.active = false;
 
+    runPath = '';
+    setupBestGhost();
     applyUpgrades();
     buildLevelSelect();
     updateUI();
@@ -163,11 +175,14 @@ function loadProgress() {
         if (!raw) return;
         const s = JSON.parse(raw);
         if (s && typeof s === 'object') {
-            progress.unlocked = Math.min(LEVELS.length - 1, Math.max(0, s.unlocked | 0));
+            progress.unlocked = Math.min(HOUSE_LEVELS - 1, Math.max(0, s.unlocked | 0));
             progress.best = s.best && typeof s.best === 'object' ? s.best : {};
             progress.bestScore = s.bestScore | 0;
             progress.points = Math.max(0, s.points | 0);
             progress.upgrades = sanitizeUpgrades(s.upgrades);
+            progress.runs = sanitizeRuns(s.runs);
+            progress.rooms = sanitizeRooms(s.rooms);
+            progress.raceBest = s.raceBest !== false;
         }
     } catch (e) {
         // Storage blocked or corrupt: play without saving
@@ -182,13 +197,160 @@ function saveProgress() {
     }
 }
 
+// Saved runs: a key, the move count, the stars, and the moves themselves
+function sanitizeRuns(raw) {
+    const out = {};
+    if (!raw || typeof raw !== 'object') return out;
+    for (const key of Object.keys(raw)) {
+        const r = raw[key];
+        if (key.length > 40 || !r || typeof r.path !== 'string' || !/^[UDLR]{1,4000}$/.test(r.path)) continue;
+        out[key] = { moves: r.path.length, stars: Math.max(1, Math.min(3, r.stars | 0)), path: r.path };
+    }
+    return out;
+}
+
+// Saved rooms: an id, a name and a room code that still decodes
+function sanitizeRooms(raw) {
+    const out = [];
+    if (!Array.isArray(raw)) return out;
+    for (const r of raw) {
+        if (!r || typeof r.id !== 'string' || !/^[a-z0-9]{1,16}$/.test(r.id) || out.some((o) => o.id === r.id)) continue;
+        if (!decodeRoom(r.code, r.name)) continue;
+        out.push({ id: r.id, name: cleanRoomName(r.name), code: r.code });
+        if (out.length >= MAX_SAVED_ROOMS) break;
+    }
+    return out;
+}
+
+// --- Rooms beyond the house ---------------------------------------------------
+
+// What this room's best run is saved under
+function roomKey() {
+    return roomMode === 'house' ? 'h' + currentLevel : specialKey;
+}
+
+// Everything cached per level index must be rebuilt when the extra slot gets a different room
+function invalidateRoomCaches() {
+    if (typeof scene !== 'undefined') scene.level = -1;
+    if (typeof fp3d !== 'undefined' && fp3d) {
+        fp3d.map = null;
+        fp3d.spriteLevel = -1;
+        fp3d.sceneBuf = null;
+    }
+    if (typeof window !== 'undefined' && window.gl3d) window.gl3d.invalidate();
+}
+
+// Load the room of the day or a built room into the extra slot and start it
+function loadSpecialRoom(room, mode, key) {
+    if (roomMode === 'house') houseLevel = currentLevel;
+    LEVELS[SPECIAL_LEVEL] = room;
+    roomMode = mode;
+    specialKey = key || '';
+    dailyKey = mode === 'daily' ? room.daily || '' : '';
+    currentLevel = SPECIAL_LEVEL;
+    levelStartScore = 0;
+    npcReplay.active = false;
+    helpVisible = false;
+    invalidateRoomCaches();
+    initLevel(SPECIAL_LEVEL);
+    if (typeof syncModeBar === 'function') syncModeBar();
+}
+
+function returnToHouse() {
+    roomMode = 'house';
+    specialKey = '';
+    dailyKey = '';
+    currentLevel = Math.max(0, Math.min(houseLevel, progress.unlocked));
+    levelStartScore = 0;
+    npcReplay.active = false;
+    helpVisible = false;
+    initLevel(currentLevel);
+    if (typeof syncModeBar === 'function') syncModeBar();
+}
+
+// --- Racing your best run -------------------------------------------------------
+
+// Keep a finished run when it beats the one on file; true when it became the best
+function saveRun(key, result, path) {
+    if (!key || !path || path.length !== result.moves) return false;
+    const prev = progress.runs[key];
+    if (prev && prev.moves <= result.moves) {
+        prev.stars = Math.max(prev.stars, result.stars);
+        return false;
+    }
+    progress.runs[key] = { moves: result.moves, stars: Math.max(result.stars, prev ? prev.stars : 0), path };
+    // Old days of the room of the day make way; nothing else is ever dropped
+    const days = Object.keys(progress.runs).filter((k) => k[0] === 'd').sort();
+    while (days.length > MAX_DAILY_RUNS) delete progress.runs[days.shift()];
+    return true;
+}
+
+// Line the best run up at the dock, if this room has one and it still fits the room
+function setupBestGhost() {
+    bestGhost = null;
+    const run = progress.runs[roomKey()];
+    if (!run || !run.path || typeof replayRun !== 'function') return;
+    const steps = replayRun(LEVELS[currentLevel], run.path);
+    if (steps.length !== run.path.length + 1) return;
+    bestGhost = {
+        steps,
+        moves: run.moves,
+        drawX: steps[0].col * TILE + TILE / 2,
+        drawY: steps[0].row * TILE + TILE / 2,
+        dir: 'up',
+        angle: FP_ANGLE_MAP.up,
+    };
+}
+
+function bestGhostStep() {
+    return bestGhost ? bestGhost.steps[Math.min(moves, bestGhost.steps.length - 1)] : null;
+}
+
+// Tiles cleaned compared with the best run at the same move: positive is ahead
+function bestGhostDelta() {
+    const s = bestGhostStep();
+    return s ? cleaned - s.cleaned : 0;
+}
+
+function bestGhostShown() {
+    return !!bestGhost && progress.raceBest && (gameState === 'PLAYING' || gameState === 'GAME_OVER');
+}
+
+// The ghost takes one step for each of the player's; ease it between tiles once a frame
+function updateBestGhost() {
+    const s = bestGhostStep();
+    if (!s) return;
+    const tx = s.col * TILE + TILE / 2, ty = s.row * TILE + TILE / 2;
+    const k = easeK(0.3);
+    bestGhost.drawX += (tx - bestGhost.drawX) * k;
+    bestGhost.drawY += (ty - bestGhost.drawY) * k;
+    if (Math.abs(tx - bestGhost.drawX) < 0.5) bestGhost.drawX = tx;
+    if (Math.abs(ty - bestGhost.drawY) < 0.5) bestGhost.drawY = ty;
+    bestGhost.dir = s.dir;
+    if (typeof lerpAngle === 'function') bestGhost.angle = lerpAngle(bestGhost.angle, FP_ANGLE_MAP[s.dir], easeK(0.22));
+    bestGhost.done = moves >= bestGhost.steps.length - 1;
+}
+
+// Where the ghost is for the 3D views, in tiles; null when it is not showing
+function bestGhostPose() {
+    if (!bestGhostShown()) return null;
+    return { x: bestGhost.drawX / TILE, y: bestGhost.drawY / TILE, angle: bestGhost.angle, done: !!bestGhost.done };
+}
+
+function toggleRaceBest(on) {
+    progress.raceBest = on === undefined ? !progress.raceBest : !!on;
+    saveProgress();
+    updateUI();
+    if (typeof syncModeBar === 'function') syncModeBar();
+}
+
 function recordLevelResult(levelIndex, result) {
     const prev = progress.best[levelIndex];
     progress.best[levelIndex] = {
         moves: prev ? Math.min(prev.moves, result.moves) : result.moves,
         stars: prev ? Math.max(prev.stars, result.stars) : result.stars,
     };
-    progress.unlocked = Math.max(progress.unlocked, Math.min(levelIndex + 1, LEVELS.length - 1));
+    progress.unlocked = Math.max(progress.unlocked, Math.min(levelIndex + 1, HOUSE_LEVELS - 1));
     progress.bestScore = Math.max(progress.bestScore, score);
     saveProgress();
 }
@@ -203,9 +365,9 @@ function buildLevelSelect() {
     label.className = 'level-label';
     label.textContent = 'Levels';
     el.appendChild(label);
-    LEVELS.forEach((lv, i) => {
+    LEVELS.slice(0, HOUSE_LEVELS).forEach((lv, i) => {
         const b = document.createElement('button');
-        b.className = 'level-btn' + (i === currentLevel ? ' current' : '');
+        b.className = 'level-btn' + (roomMode === 'house' && i === currentLevel ? ' current' : '');
         b.textContent = String(i + 1);
         const best = progress.best[i];
         b.title = best ? `${lv.name} · best ${best.moves} moves` : lv.name;
@@ -226,8 +388,16 @@ function buildLevelSelect() {
 }
 
 function selectLevel(i) {
-    if (i < 0 || i >= LEVELS.length || i > progress.unlocked) return;
+    if (i < 0 || i >= HOUSE_LEVELS || i > progress.unlocked) return;
     if (i !== currentLevel) levelStartScore = 0; // jumping to another level starts a fresh run
+    if (roomMode !== 'house') {
+        roomMode = 'house';
+        specialKey = '';
+        dailyKey = '';
+        levelStartScore = 0;
+        if (typeof syncModeBar === 'function') syncModeBar();
+    }
+    houseLevel = i;
     currentLevel = i;
     npcReplay.active = false;
     helpVisible = false;
@@ -251,6 +421,7 @@ function tryMove(dc, dr) {
     roomba.col = newCol;
     roomba.row = newRow;
     moves++;
+    runPath += dc > 0 ? 'R' : dc < 0 ? 'L' : dr > 0 ? 'D' : 'U';
     roombaWheelAngle += 0.5;
     noteMove();
 
@@ -308,17 +479,27 @@ function completeLevel() {
     const bonus = 200 + underPar * 10;
     const stars = moves <= parMoves ? 3 : moves <= parMoves * 1.25 ? 2 : 1;
     score += bonus;
-    // Upgrade points: one for every star earned on this level for the first time
-    const prevBest = progress.best[currentLevel];
-    const points = Math.max(0, stars - (prevBest ? prevBest.stars : 0));
+    // Upgrade points: one for every star earned on a house room for the first time. The room
+    // of the day and built rooms keep a best run but pay no points, so the house stays the goal.
+    const house = roomMode === 'house';
+    const prevBest = house ? progress.best[currentLevel] : null;
+    const points = house ? Math.max(0, stars - (prevBest ? prevBest.stars : 0)) : 0;
     progress.points = (progress.points | 0) + points;
-    levelResult = { moves, par: parMoves, bonus, stars, points, tileScore: cleaned * 10, at: chargerPulse };
+    const key = roomKey();
+    const prevRun = progress.runs[key];
+    const newBest = saveRun(key, { moves, stars }, runPath);
+    levelResult = {
+        moves, par: parMoves, bonus, stars, points, tileScore: cleaned * 10, at: chargerPulse,
+        newBest, prevMoves: prevRun ? prevRun.moves : 0,
+    };
     gameState = 'LEVEL_COMPLETE';
     stopHold();
     sound('levelComplete');
-    recordLevelResult(currentLevel, levelResult);
+    if (house) recordLevelResult(currentLevel, levelResult);
+    else saveProgress();
     buildLevelSelect();
     buildUpgradePanel();
+    if (typeof syncModeBar === 'function') syncModeBar();
 }
 
 // First person: left/right turn 90 degrees in place, up/down drive forward/back relative to facing.
@@ -417,8 +598,10 @@ function updateViewButtons() {
 
 // Restart keeps the current view. After the final level it starts the game over.
 function restartLevel() {
-    if (gameState === 'LEVEL_COMPLETE' && currentLevel === LEVELS.length - 1) {
+    if (gameState === 'EDITING') return;
+    if (roomMode === 'house' && gameState === 'LEVEL_COMPLETE' && currentLevel === HOUSE_LEVELS - 1) {
         currentLevel = 0;
+        houseLevel = 0;
         levelStartScore = 0;
     }
     npcReplay.active = false;
@@ -543,6 +726,7 @@ function syncFullscreen() {
     const on = isFullscreen();
     if (on) clearTimeout(fullscreenTimer);
     document.body.classList.toggle('is-fullscreen', on);
+    if (typeof placeModeBar === 'function') placeModeBar(on);
     const btn = document.getElementById('btnFullscreen');
     if (btn) {
         btn.textContent = on ? 'Exit full screen' : 'Full screen';
@@ -569,7 +753,11 @@ function fitCanvasDensity() {
 
 // Keys pressed inside the design or upgrades panels (wheels, switches, buttons) belong to them
 function keyIsForPanel(e) {
-    return !!(e.target && e.target.closest && e.target.closest('#designPanel, #upgradePanel'));
+    const t = e.target;
+    if (!t || !t.closest) return false;
+    if (t.closest('#designPanel, #upgradePanel')) return true;
+    // In the bar at the top only the things you type into keep their keys
+    return !!(t.matches && t.matches('#modeBar input[type="text"], #modeBar select'));
 }
 
 document.addEventListener('keydown', (e) => {
@@ -607,6 +795,18 @@ document.addEventListener('keydown', (e) => {
     // Escape leaves the fallback full-screen layout (the browser handles the real one itself)
     if (e.key === 'Escape' && fullscreenFallback) {
         toggleFullscreen();
+        return;
+    }
+
+    // While a room is being built the keys belong to the editor
+    if (gameState === 'EDITING') {
+        if (typeof editorKey === 'function') editorKey(e);
+        return;
+    }
+
+    // B: race the ghost of your best run, on / off
+    if (e.key === 'b' || e.key === 'B') {
+        toggleRaceBest();
         return;
     }
 
@@ -772,7 +972,19 @@ function updateUI() {
     elMoves.textContent = moves;
     elParCount.textContent = parMoves;
     elScore.textContent = score;
-    elLevelNum.textContent = `${currentLevel + 1} · ${LEVELS[currentLevel].name}`;
+    elLevelNum.textContent = roomMode === 'house' ? `${currentLevel + 1} · ${LEVELS[currentLevel].name}` : LEVELS[currentLevel].name;
+    const elBest = document.getElementById('bestStat');
+    if (elBest) {
+        const racing = !!bestGhost && progress.raceBest && gameState !== 'EDITING';
+        elBest.hidden = !racing;
+        if (racing) {
+            const d = bestGhostDelta();
+            const elDelta = document.getElementById('bestDelta');
+            elDelta.textContent = d > 0 ? `${d} ahead` : d < 0 ? `${-d} behind` : 'level';
+            elDelta.classList.toggle('ahead', d > 0);
+            elDelta.classList.toggle('behind', d < 0);
+        }
+    }
 
     const max = batteryMax();
     const pct = Math.max(0, Math.min(100, (roomba.battery / max) * 100));
@@ -832,6 +1044,7 @@ function renderFrame(timestamp = performance.now()) {
     dtFrames = dtMs / FRAME_MS;
 
     ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+    updateBestGhost();
 
     const fpActive = viewMode === 'FP' &&
         (gameState === 'PLAYING' || gameState === 'LEVEL_COMPLETE' || gameState === 'GAME_OVER');
@@ -851,6 +1064,8 @@ function renderFrame(timestamp = performance.now()) {
         }
         if (gameState === 'PAR_REPLAY') drawNpcOverlay();
         else drawOverlay();
+    } else if (gameState === 'EDITING') {
+        if (typeof drawEditor === 'function') drawEditor();
     } else if (fpActive) {
         renderFirstPersonAny();
         drawOverlay();
@@ -862,6 +1077,7 @@ function renderFrame(timestamp = performance.now()) {
         drawBokeh();
         drawFlashlight2D();
         drawDustPuffs();
+        if (bestGhostShown() && typeof drawBestGhost === 'function') drawBestGhost();
         drawRoomba();
         drawOverlay();
     }
@@ -882,8 +1098,9 @@ function renderFrame(timestamp = performance.now()) {
 
 // === NEXT LEVEL / RESTART HANDLERS ===
 function nextLevel() {
-    if (gameState === 'LEVEL_COMPLETE' && currentLevel < LEVELS.length - 1) {
+    if (roomMode === 'house' && gameState === 'LEVEL_COMPLETE' && currentLevel < HOUSE_LEVELS - 1) {
         currentLevel++;
+        houseLevel = currentLevel;
         levelStartScore = score;
         initLevel(currentLevel);
     }
@@ -989,9 +1206,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (lookDragged) return; // a drag to look around is not a click
         if (helpVisible) {
             toggleHelp();
-        } else if (gameState === 'LEVEL_COMPLETE') {
-            nextLevel();
+            return;
         }
+        if (gameState === 'EDITING') return; // the editor handles its own pointer
+        if (gameState === 'LEVEL_COMPLETE') nextLevel();
     });
 
     // Drag on the board in 3D to look around; the view eases back when you drive
@@ -1031,6 +1249,7 @@ document.addEventListener('DOMContentLoaded', () => {
         initDesignUI();
     }
     currentLevel = progress.unlocked; // resume at the furthest level reached
+    houseLevel = currentLevel;
     initLevel(currentLevel);
     if (typeof initUpgradeUI === 'function') initUpgradeUI();
     updateViewButtons();

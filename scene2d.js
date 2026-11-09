@@ -176,6 +176,17 @@ function ensureSceneLayers() {
     scene.moteBox = moteBoxFor(theme);
 }
 
+// Repaint only the furniture (and find the cats again): what changes with each piece placed
+// while a room is being built. Everything else waits for the theme or the screen to change.
+function refreshFurnitureLayer() {
+    if (scene.level !== currentLevel || scene.dpr !== canvasDpr || !scene.theme) {
+        ensureSceneLayers();
+        return;
+    }
+    scene.furniture = buildFurnitureLayer(scene.theme);
+    scene.cats = findCats(scene.theme);
+}
+
 // --- Floor -------------------------------------------------------------------------------------
 
 // Hardwood planks: half-tile-high boards of varying length and tone, grain, knots and seams.

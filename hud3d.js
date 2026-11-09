@@ -125,6 +125,12 @@ function fpDrawHudGl(view) {
         ctx.lineTo(px + Math.cos(view.angle + FP_FOV / 2) * 22, py + Math.sin(view.angle + FP_FOV / 2) * 22);
         ctx.closePath();
         ctx.fill();
+        if (view.best) {
+            ctx.fillStyle = '#D9A441';
+            ctx.beginPath();
+            ctx.arc(mx + view.best.x * s, my + view.best.y * s, 2.2, 0, Math.PI * 2);
+            ctx.fill();
+        }
         const dot = view.ghost ? '#00BFFF' : design.lightColor;
         ctx.fillStyle = dot;
         ctx.beginPath();

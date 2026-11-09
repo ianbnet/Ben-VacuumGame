@@ -59,7 +59,7 @@ const sandbox = {
 };
 sandbox.window = sandbox;
 vm.createContext(sandbox);
-for (const f of ['core.js', 'upgrades.js', 'design.js', 'scene3d.js', 'render2d.js', 'scene2d.js', 'render3d.js', 'game.js']) {
+for (const f of ['core.js', 'rooms.js', 'upgrades.js', 'design.js', 'scene3d.js', 'render2d.js', 'scene2d.js', 'render3d.js', 'game.js', 'modes.js']) {
     vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), sandbox, { filename: f });
 }
 const G = (expr) => vm.runInContext(expr, sandbox);
@@ -383,6 +383,136 @@ check(lampShadow.dx > 0 && lampShadow.dy > 0, 'under a weak sun a lit lamp casts
 check(G('s2LampArms().length') === 14, 'the Sputnik has fourteen arms from above too');
 check(G('typeof paintGlaze') === 'function' && G('typeof paintDust') === 'function' && G('typeof paintWoodFloor') === 'function' && G('typeof castShadow') === 'function', 'the painters the 3D renderers share are still there');
 check(['drawScene', 'drawLighting', 'drawRoomba', 'drawNpcTrail', 'drawNpcVacuum', 'drawNpcOverlay', 'drawOverlay', 'drawBanner', 'drawHelp', 'drawCleanAnimations', 'drawDustMotes', 'drawBokeh', 'drawFlashlight2D', 'drawDustPuffs', 'createFloorPatterns'].every((f) => G(`typeof ${f}`) === 'function'), 'every routine the game loop calls is defined');
+
+section('Extra rooms: codes and validation');
+check(G('HOUSE_LEVELS') === 6 && G('SPECIAL_LEVEL') === 6 && G('LEVELS.length') === 6, 'the house has six rooms and one more slot after them');
+let houseRoomsOk = true, roundTripOk = true;
+for (let i = 0; i < 6; i++) {
+    const v = G(`validateRoom(Object.assign({ theme: ${i} }, LEVELS[${i}]))`);
+    if (!v.ok || v.tiles !== G(`(() => { const g = buildLevelGrid(${i}); let n = 0; for (const row of g) for (const c of row) if (c === DIRTY) n++; return n; })()`)) houseRoomsOk = false;
+    const code = G(`encodeRoom(Object.assign({ theme: ${i} }, LEVELS[${i}]))`);
+    if (G(`encodeRoom(decodeRoom(${JSON.stringify(code)}, 'x'))`) !== code || !/^[0-9a-z._]+$/.test(code)) roundTripOk = false;
+}
+check(houseRoomsOk, 'every house room passes the same validation as a built room');
+check(roundTripOk, 'every house room survives a trip through its URL-safe room code');
+const badCodes = ['', 'x', '2.0.1.00.', '1.9.1.00.', '1.0.4.00.', '1.0.1.00.t11_c22', '1.0.1.00.sd0', '1.0.1.11.t11', '1.0.1.00.t11v', '1.0.1.00.q11', '1.0.1.zz.'];
+check(badCodes.every((c) => G(`decodeRoom(${JSON.stringify(c)}, 'x')`) === null), 'codes that are malformed, overlapping, out of bounds or sitting on the dock are refused');
+check(G("decodeRoom(null, 'x')") === null && G("decodeRoom('1.0.1.00.' + 'w00_'.repeat(400), 'x')") === null, 'codes that are not strings or are far too long are refused');
+const sealed = G("validateRoom(decodeRoom('1.0.1.00.wd0_we1', 'x'))");
+check(sealed.sound && !sealed.ok && sealed.unreachable.length === 1 && sealed.unreachable[0].col === 14 && sealed.unreachable[0].row === 0, 'a walled-off tile is found and named, and the room still decodes for editing');
+const farRoom = G("(() => { const r = blankRoom('a', 0); r.batteryCost = 3; const v = validateRoom(r); r.charger = { col: 7, row: 6 }; return [v.ok, v.tooFar.length, validateRoom(r).ok]; })()");
+check(farRoom[0] === false && farRoom[1] === 45 && farRoom[2] === true, 'tiles beyond a round trip on one charge fail the room, and moving the dock to the middle fixes it');
+check(G('roomReach(1)') === 50 && G('roomReach(2)') === 25 && G('roomReach(3)') === 16, 'reach is half a charge in moves');
+check(G("validateRoom({ charger: { col: 0, row: 0 }, batteryCost: 1, obstacles: [], theme: 0 }).tiles") === 179 && G("validateRoom(null).reason") !== '', 'an empty room has 179 tiles to clean; nothing at all is not a room');
+check(G("cleanRoomName('  <b>Hi</b>\\n there  ')") === 'bHi/b there' && G("cleanRoomName('')") === 'My Room' && G("cleanRoomName('x'.repeat(99)).length") === 28, 'room names lose markup and control characters, are capped, and never end up empty');
+const stuck = G("computeParRoute(decodeRoom('1.0.1.00.wd0_we1', 'x'))");
+check(Number.isFinite(stuck.totalMoves) && stuck.totalMoves > 150, 'the par solver stops instead of looping on a room it cannot finish');
+
+section('Extra rooms: building');
+const built = G(`(() => {
+    const r = blankRoom('Test', 2);
+    const out = {};
+    out.sofa = roomPlace(r, 'couch', 14, 0, false);
+    out.overlap = roomPlace(r, 'table', 12, 0, false);
+    out.onDock = roomPlace(r, 'chair', 0, 11, false);
+    out.upright = roomPlace(r, 'couch', 0, 0, true);
+    out.table = roomPlace(r, 'table', 5, 5, false);
+    out.dockUnderTable = roomMoveDock(r, 6, 6);
+    out.dockMoved = roomMoveDock(r, 7, 11);
+    out.count = r.obstacles.length;
+    out.eraseCorner = roomErase(r, 6, 6);
+    out.eraseNothing = roomErase(r, 9, 9);
+    out.after = r.obstacles.length;
+    out.turnTable = roomPieceSize('table', true);
+    out.code = encodeRoom(r);
+    return out;
+})()`);
+check(built.sofa && built.sofa.col === 12 && built.sofa.w === 3 && built.sofa.h === 1, 'a piece put down at the edge is nudged back inside the room');
+check(built.overlap === null && built.onDock === null, 'a piece cannot go on top of another piece or on the dock');
+check(built.upright && built.upright.w === 1 && built.upright.h === 3 && built.turnTable.w === 2 && built.turnTable.h === 2, 'sofas stand upright when turned; tables do not turn');
+check(built.dockUnderTable === false && built.dockMoved === true, 'the dock moves to a free tile and never under furniture');
+check(built.count === 3 && built.eraseCorner === true && built.eraseNothing === false && built.after === 2, 'erasing any tile of a piece removes the whole piece');
+check(built.code === '1.2.1.7b.sc0_s00v', 'a built room has the code its pieces spell out');
+check(G("s3Facing({ col: 0, row: 5, w: 3, h: 1 })") === 'north' && G("s3Facing({ col: 0, row: 8, w: 3, h: 1 })") === 'south', 'a sofa lying across the room backs onto the top or bottom wall, never a side wall');
+check(G("s3Facing({ col: 2, row: 0, w: 1, h: 3 })") === 'west' && G("s3Facing({ col: 12, row: 0, w: 1, h: 3 })") === 'east', 'an upright sofa backs onto a side wall');
+
+section('Room of the day');
+check(G("dateKeyOf(new Date(2026, 10, 9))") === '2026-11-09' && G("formatDateKey('2026-11-09')") === 'Mon 9 Nov 2026', 'dates are keyed by the calendar day and read plainly');
+check(G("shiftDateKey('2026-12-31', 1)") === '2027-01-01' && G("shiftDateKey('2028-02-28', 1)") === '2028-02-29' && G("shiftDateKey('2026-03-01', -1)") === '2026-02-28', 'the day after and before cross months, years and leap days');
+check(G("dayNumber('2026-11-10') - dayNumber('2026-11-09')") === 1 && G("parseDateKey('2026-02-30')") === null && G("parseDateKey('nonsense')") === null, 'consecutive days are one apart and impossible dates are refused');
+check(G("encodeRoom(generateDailyRoom('2026-11-09'))") === '1.0.1.0b.w63_w73_w83_w93_sa2_s60_t46_c96_c4a_c37_cc5_p20_p02_pea' && G("generateDailyRoom('2026-11-09').name") === 'Galaxy Hideout',
+    'the room for 9 November 2026 is the same room it has always been (changing the generator changes every day for everyone)');
+check(G("encodeRoom(generateDailyRoom('2027-03-01'))") === G("encodeRoom(generateDailyRoom('2027-03-01'))"), 'the same day always gives the same room');
+let dailyOk = true;
+const dailyCodes = new Set();
+for (let d = 0; d < 90; d++) {
+    const key = G(`shiftDateKey('2026-11-01', ${d})`);
+    const info = G(`(() => { const r = generateDailyRoom('${key}'); const v = validateRoom(r); return { ok: v.ok, tiles: v.tiles, par: computeParRoute(r).totalMoves, theme: r.theme, want: ((dayNumber('${key}') % 6) + 6) % 6, name: r.name, daily: r.daily, code: encodeRoom(r), back: !!decodeRoom(encodeRoom(r), r.name) }; })()`);
+    dailyCodes.add(info.code);
+    if (!info.ok || info.tiles < 96 || info.par < info.tiles || info.par > info.tiles * 2.7 || info.theme !== info.want || !info.name || info.daily !== key || !info.back) dailyOk = false;
+}
+check(dailyOk, 'ninety days in a row give rooms that can be finished, are not cramped, are not mostly commuting, and rotate through the six themes');
+check(dailyCodes.size === 90, 'ninety days give ninety different rooms');
+
+section('Racing your best run');
+const drivePar = `(() => { const path = parPath.slice(parApproachLen); let prev = { col: roomba.col, row: roomba.row }; for (const s of path) { tryMove(s.col - prev.col, s.row - prev.row); prev = s; if (gameState !== 'PLAYING') break; } return gameState; })()`;
+const replay = G("replayRun(LEVELS[0], 'UUR')");
+check(replay.length === 3 && replay[2].col === 14 && replay[2].row === 9 && replay[1].cleaned === 1 && replay[2].cleaned === 2 && replay[2].dir === 'up', 'a recorded run replays move by move and stops at a move the room does not allow');
+G("progress.runs = {}; progress.rooms = []; progress.raceBest = true; roomMode = 'house'; specialKey = ''; currentLevel = 0; houseLevel = 0; levelStartScore = 0; initLevel(0)");
+check(G('bestGhost') === null && G('runPath') === '', 'a room with no finished run has no ghost');
+check(G(drivePar) === 'LEVEL_COMPLETE' && G('levelResult.newBest') === true && G('progress.runs.h0.path.length') === G('moves') && G('progress.runs.h0.moves') === G('parMoves'), 'finishing a room saves the run, move for move');
+G('restartLevel()');
+check(G('bestGhost.steps.length') === G('progress.runs.h0.moves') + 1 && G('bestGhostShown()') === true && G('bestGhostDelta()') === 0, 'on the next go the best run is lined up at the dock, level with the player');
+G('tryMove(-1, 0); tryMove(1, 0)');
+check(G('bestGhostDelta()') < 0 && G('bestGhostStep().cleaned') === 2, 'wasting moves puts the player behind the ghost');
+check(G(drivePar) === 'LEVEL_COMPLETE' && G('levelResult.newBest') === false && G('progress.runs.h0.moves') === G('parMoves') && G('moves') === G('parMoves') + 2, 'a slower run does not replace the best one');
+G('restartLevel(); toggleRaceBest(false)');
+check(G('bestGhostShown()') === false && G('bestGhostPose()') === null, 'the ghost can be switched off');
+G('toggleRaceBest(true)');
+check(G("JSON.stringify(sanitizeRuns({ a: { path: 'XYZ' }, b: { path: 'UDLR', stars: 9, moves: 99 }, c: null }))") === '{"b":{"moves":4,"stars":3,"path":"UDLR"}}', 'saved runs that are not runs are dropped on load, and the move count comes from the moves');
+check(G("saveRun('', { moves: 1, stars: 1 }, 'U')") === false && G("saveRun('zz', { moves: 3, stars: 1 }, 'U')") === false, 'a run with no room to file it under, or the wrong length, is not saved');
+
+section('Room modes');
+const before = G('JSON.stringify({ points: progress.points, best: progress.best, unlocked: progress.unlocked })');
+G("openDaily('2026-11-09')");
+const dayRoom = G("validateRoom(LEVELS[SPECIAL_LEVEL])");
+check(G('roomMode') === 'daily' && G('currentLevel') === 6 && G('LEVELS.length') === 7 && G('totalDirty') === dayRoom.tiles && G('roomKey()') === 'd2026-11-09' && G('gameState') === 'PLAYING', 'the room of the day loads into the extra slot and starts');
+check(G('s3Theme(currentLevel) === S3_THEMES[LEVELS[SPECIAL_LEVEL].theme]') && G('scene.level') === -1, 'it wears its own theme, and what was cached for the slot is thrown away');
+check(G(drivePar) === 'LEVEL_COMPLETE' && G('levelResult.points') === 0 && G('JSON.stringify({ points: progress.points, best: progress.best, unlocked: progress.unlocked })') === before, 'finishing it pays no upgrade points and leaves the house progress alone');
+check(G("progress.runs['d2026-11-09'].moves") === G('moves'), 'it does keep a best run of its own');
+G('nextLevel()');
+check(G('currentLevel') === 6 && G('gameState') === 'LEVEL_COMPLETE', 'there is no next room after the room of the day');
+G("openDaily('2999-01-01')");
+check(G('dailyKey') === G('todayKey()'), 'a day that has not happened yet opens today instead');
+G('showHouse()');
+check(G('roomMode') === 'house' && G('currentLevel') === 0 && G('roomKey()') === 'h0' && G('gameState') === 'PLAYING', 'going back to the house returns to the room you left');
+G("openDaily('2026-11-08'); selectLevel(0)");
+check(G('roomMode') === 'house' && G('currentLevel') === 0, 'picking a house room leaves the room of the day');
+
+G('openBuild()');
+const roomId = G('build.id');
+check(G('roomMode') === 'custom' && G('gameState') === 'EDITING' && G('progress.rooms.length') === 1 && roomId.length > 0 && G('build.check.ok') === true, 'Build a Room starts a blank room of your own in the editor');
+G('restartLevel(); handleDirection("up")');
+check(G('gameState') === 'EDITING' && G('moves') === 0, 'the vacuum does not drive and the room does not restart while it is being built');
+G("progress.runs['c' + build.id] = { moves: 1, stars: 1, path: 'U' }; build.tool = 'couch'; editorApply({ col: 5, row: 2 }, false)");
+check(G('build.room.obstacles.length') === 1 && G('progress.rooms[0].code') === G('encodeRoom(build.room)') && G("progress.runs['c' + build.id]") === undefined, 'placing a piece saves the room and retires the best run of the old layout');
+G("build.tool = 'wall'; editorApply({ col: 1, row: 11 }, false); editorApply({ col: 0, row: 10 }, false)");
+check(G('build.check.ok') === false && G('build.check.unreachable.length') > 100 && G('playBuiltRoom()') === false && G('gameState') === 'EDITING', 'a room that walls the dock in cannot be played until it is fixed');
+G("build.tool = 'erase'; editorApply({ col: 1, row: 11 }, false)");
+check(G('build.check.ok') === true && G('playBuiltRoom()') === true && G('gameState') === 'PLAYING' && G('roomKey()') === 'c' + roomId && G('totalDirty') === G('build.check.tiles'), 'once every tile can be reached it plays, with a best run filed under the room');
+check(G(drivePar) === 'LEVEL_COMPLETE' && G('levelResult.points') === 0 && G("!!progress.runs['c' + build.id]"), 'a built room keeps a best run and pays no points');
+
+const giftCode = G('encodeRoom(build.room)');
+G('showHouse()');
+check(G(`openSharedRoom(${JSON.stringify(giftCode)}, 'Gift')`) === true && G('roomMode') === 'custom' && G('gameState') === 'PLAYING' && G('build.id') === '' && G('roomKey()')[0] === 's' && G('progress.rooms.length') === 1, 'a room that arrives as a link opens ready to play and is not saved until you keep it');
+check(G('keepSharedRoom()') === true && G('progress.rooms.length') === 2 && G('roomKey()')[0] === 'c' && G('progress.rooms[1].name') === 'Gift', 'keeping it puts it among your rooms');
+check(G("openSharedRoom('not a room', 'x')") === false, 'a link that is not a room opens nothing');
+check(G("openSharedRoom('1.0.1.00.wd0_we1', 'Half built')") === true && G('gameState') === 'EDITING' && G('progress.rooms.length') === 3, 'a shared room that cannot be finished yet opens in the editor as a room of your own');
+G('build.deleteArmedUntil = performance.now() + 5000; deleteBuiltRoom()');
+check(G('progress.rooms.length') === 2 && G('gameState') === 'EDITING' && G('build.id') === G('progress.rooms[1].id'), 'deleting a room opens the next one you have');
+check(G("JSON.stringify(sanitizeRooms([{ id: 'a1', name: 'Ok', code: '1.0.1.00.' }, { id: 'a1', name: 'Twin', code: '1.0.1.00.' }, { id: 'BAD ID', name: 'x', code: '1.0.1.00.' }, { id: 'b2', name: 'x', code: 'junk' }]))") === '[{"id":"a1","name":"Ok","code":"1.0.1.00."}]', 'saved rooms with a bad id, a twin id or a code that no longer decodes are dropped on load');
+G('showHouse()');
+check(G('roomMode') === 'house' && G('gameState') === 'PLAYING' && G('HOUSE_LEVELS') === 6, 'and the house is still there afterwards');
 
 console.log(`\n${passes} passed, ${failures} failed`);
 process.exit(failures ? 1 : 0);

@@ -109,16 +109,22 @@ const S3_THEMES = [
     },
 ];
 
+// The theme for a level: its own choice when it has one (extra rooms do), else by position
 function s3Theme(levelIndex) {
-    return S3_THEMES[((levelIndex % S3_THEMES.length) + S3_THEMES.length) % S3_THEMES.length];
+    const lv = typeof LEVELS !== 'undefined' ? LEVELS[levelIndex] : null;
+    const n = lv && Number.isInteger(lv.theme) ? lv.theme : levelIndex;
+    return S3_THEMES[((n % S3_THEMES.length) + S3_THEMES.length) % S3_THEMES.length];
 }
 
-// Direction from a footprint to its nearest wall: where a couch or chair puts its back
+// Direction from a footprint to its nearest wall: where a couch or chair puts its back.
+// A long piece keeps its back along its long side, so a sofa never backs onto a wall end-on.
 function s3Facing(obs) {
-    const d = [
+    let d = [
         ['north', obs.row], ['south', ROWS - (obs.row + obs.h)],
         ['west', obs.col], ['east', COLS - (obs.col + obs.w)],
     ];
+    if (obs.w > obs.h) d = d.slice(0, 2);
+    else if (obs.h > obs.w) d = d.slice(2);
     d.sort((a, b) => a[1] - b[1]);
     return d[0][0];
 }

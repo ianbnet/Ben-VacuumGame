@@ -794,6 +794,7 @@ function fpPlayerView() {
         onDock: grid[roomba.row][roomba.col] === CHARGER,
         showHud: true,
         ghost: false,
+        best: typeof bestGhostPose === 'function' ? bestGhostPose() : null,
         glow: design.lightRgb,
         moving: Math.abs(targetX - roomba.drawX) > 1 || Math.abs(targetY - roomba.drawY) > 1,
     };
@@ -1294,6 +1295,12 @@ function fpDrawMinimap(view) {
     ctx.lineTo(px + Math.cos(view.angle + FP_FOV / 2) * cone, py + Math.sin(view.angle + FP_FOV / 2) * cone);
     ctx.closePath();
     ctx.fill();
+    if (view.best) {
+        ctx.fillStyle = '#D9A441';
+        ctx.beginPath();
+        ctx.arc(mx + view.best.x * s, my + view.best.y * s, 2.6, 0, Math.PI * 2);
+        ctx.fill();
+    }
     const dotColor = view.ghost ? '#00BFFF' : '#00FF88';
     ctx.fillStyle = dotColor;
     ctx.beginPath();

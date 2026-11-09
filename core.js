@@ -227,6 +227,11 @@ const LEVELS = [
     },
 ];
 
+// The house is these rooms. One more slot after them holds whichever extra room is loaded
+// (the room of the day, or one the player built); see rooms.js.
+const HOUSE_LEVELS = LEVELS.length;
+const SPECIAL_LEVEL = HOUSE_LEVELS;
+
 // === PAR SOLVER ===
 
 // BFS from a single source to all reachable tiles, returns distance grid
@@ -287,9 +292,9 @@ function bfsPath(g, fromCol, fromRow, toCol, toRow) {
     return path;
 }
 
-// Build the grid for a level (used by solver)
+// Build the grid for a level (used by solver). Takes a level index or a room object.
 function buildLevelGrid(levelIndex) {
-    const level = LEVELS[levelIndex];
+    const level = typeof levelIndex === 'number' ? LEVELS[levelIndex] : levelIndex;
     const g = [];
     for (let r = 0; r < ROWS; r++) {
         g[r] = [];
@@ -334,10 +339,10 @@ function findNpcStartCorner(g, chargerCol, chargerRow) {
 
 // Compute par moves AND full path for a level using greedy nearest-neighbor with battery
 function computeParRoute(levelIndex) {
-    const level = LEVELS[levelIndex];
+    const level = typeof levelIndex === 'number' ? LEVELS[levelIndex] : levelIndex;
     const batteryCost = level.batteryCost || 1;
     const maxBattery = 100;
-    const g = buildLevelGrid(levelIndex);
+    const g = buildLevelGrid(level);
 
     const chargerDist = bfsFromSource(g, level.charger.col, level.charger.row);
 
@@ -387,6 +392,9 @@ function computeParRoute(levelIndex) {
         }
 
         if (bestIdx === -1) {
+            // Already home on a full battery and still nothing in range: the rest cannot be
+            // cleaned (walled off, or too far for this battery). Stop instead of looping.
+            if (curCol === level.charger.col && curRow === level.charger.row && battery === maxBattery) break;
             // Return to charger
             const pathToCharger = bfsPath(g, curCol, curRow, level.charger.col, level.charger.row);
             if (!pathToCharger) break;
