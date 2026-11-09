@@ -59,7 +59,7 @@ const sandbox = {
 };
 sandbox.window = sandbox;
 vm.createContext(sandbox);
-for (const f of ['core.js', 'upgrades.js', 'design.js', 'scene3d.js', 'render3d.js', 'game.js']) {
+for (const f of ['core.js', 'upgrades.js', 'design.js', 'scene3d.js', 'render2d.js', 'scene2d.js', 'render3d.js', 'game.js']) {
     vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), sandbox, { filename: f });
 }
 const G = (expr) => vm.runInContext(expr, sandbox);
@@ -354,6 +354,35 @@ for (let lv = 0; lv < G('LEVELS.length'); lv++) {
 check(sunOk, 'in every room the sun is up and comes in through the north window');
 const top = G('s3TopDownCamera(56, 720 / 576)');
 check(top.x === G('COLS / 2') && top.z === G('ROWS / 2') && top.y * Math.tan((56 * Math.PI) / 360) >= G('ROWS / 2'), 'the overhead camera frames the whole board');
+
+section('2D room theming');
+let patchOk = true, shadowsOk = true, contrastOk = true, reachesAny = false;
+for (let lv = 0; lv < G('LEVELS.length'); lv++) {
+    const sun = G(`s2Sun(s3Theme(${lv}))`);
+    if (!(sun.dir[1] > 0)) patchOk = false;
+    for (const q of [sun.lit, ...sun.bands]) for (const [x, y] of q) if (!Number.isFinite(x) || !Number.isFinite(y)) patchOk = false;
+    if (sun.bands.length < 5) patchOk = false;
+    if (sun.reaches) reachesAny = true;
+    for (const [cx, cy, h] of [[1, 1, 1], [7, 5.5, 0.95], [14, 11, 4.8], [3, 9, 1.9]]) {
+        const s = G(`s2Shadow(s2Sun(s3Theme(${lv})), s3Theme(${lv}).lamp, ${cx}, ${cy}, ${h})`);
+        const len = Math.hypot(s.dx, s.dy);
+        if (!(len > 0 && len <= 0.56 && s.alpha >= 0.1 && s.alpha <= 0.5 && Number.isFinite(s.blur))) shadowsOk = false;
+    }
+    if (!(G(`s2CleanContrast(s3Theme(${lv}))`) >= 0.18)) contrastOk = false;
+}
+check(patchOk, 'in every room the sun comes through the north window in finite, striped bands');
+check(reachesAny, 'in some rooms the window light lands inside the room');
+check(G('s2Sun(s3Theme(0)).reaches') && G('s2Sun(s3Theme(0)).lit.every(([x, y]) => y > 0 && y < ROWS)'), 'the morning sun of the Atomic Lounge lands on the floor');
+check(shadowsOk, 'every shadow falls a short, finite way with a readable alpha');
+check(contrastOk, 'clean and dirty tiles stay apart in colour in every room');
+const shadow0 = G('s2Shadow(s2Sun(s3Theme(0)), s3Theme(0).lamp, 5, 5, 1)');
+const dir0 = G('s2Sun(s3Theme(0)).dir');
+check(Math.abs(shadow0.dx * dir0[1] - shadow0.dy * dir0[0]) < 1e-9 && shadow0.dx * dir0[0] + shadow0.dy * dir0[1] > 0, 'sunlit shadows fall away from the sun');
+const lampShadow = G('s2Shadow(s2Sun(s3Theme(1)), s3Theme(1).lamp, 12, 10, 1)');
+check(lampShadow.dx > 0 && lampShadow.dy > 0, 'under a weak sun a lit lamp casts the shadows, away from itself');
+check(G('s2LampArms().length') === 14, 'the Sputnik has fourteen arms from above too');
+check(G('typeof paintGlaze') === 'function' && G('typeof paintDust') === 'function' && G('typeof paintWoodFloor') === 'function' && G('typeof castShadow') === 'function', 'the painters the 3D renderers share are still there');
+check(['drawScene', 'drawLighting', 'drawRoomba', 'drawNpcTrail', 'drawNpcVacuum', 'drawNpcOverlay', 'drawOverlay', 'drawBanner', 'drawHelp', 'drawCleanAnimations', 'drawDustMotes', 'drawBokeh', 'drawFlashlight2D', 'drawDustPuffs', 'createFloorPatterns'].every((f) => G(`typeof ${f}`) === 'function'), 'every routine the game loop calls is defined');
 
 console.log(`\n${passes} passed, ${failures} failed`);
 process.exit(failures ? 1 : 0);

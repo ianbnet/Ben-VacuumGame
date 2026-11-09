@@ -780,14 +780,14 @@ function updateUI() {
     elBatteryText.textContent = `${Math.round(roomba.battery)} / ${max}`;
     elBatteryFill.classList.toggle('over', roomba.battery > max + 0.5);
     if (pct > 50) {
-        elBatteryFill.style.backgroundColor = '#4CAF50';
-        elBatteryText.style.color = '#4CAF50';
+        elBatteryFill.style.backgroundColor = '#5BC8A8';
+        elBatteryText.style.color = '#5BC8A8';
     } else if (pct > 20) {
-        elBatteryFill.style.backgroundColor = '#FFC107';
-        elBatteryText.style.color = '#FFC107';
+        elBatteryFill.style.backgroundColor = '#D9A441';
+        elBatteryText.style.color = '#D9A441';
     } else {
-        elBatteryFill.style.backgroundColor = '#F44336';
-        elBatteryText.style.color = '#F44336';
+        elBatteryFill.style.backgroundColor = '#E76F51';
+        elBatteryText.style.color = '#E76F51';
     }
     elBatteryFill.classList.toggle('low', pct <= 20);
     elBatteryText.classList.toggle('low', pct <= 20);

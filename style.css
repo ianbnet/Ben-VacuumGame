@@ -1,3 +1,21 @@
+/* Atomic-age chrome: deep teal charcoal, cream type, mustard labels, a teal primary */
+:root {
+    --bg: #16211F;
+    --panel: #22302F;
+    --panel-deep: #1B2726;
+    --line: rgba(242, 232, 213, 0.14);
+    --line-strong: rgba(242, 232, 213, 0.3);
+    --cream: #F2E8D5;
+    --cream-dim: rgba(242, 232, 213, 0.62);
+    --mustard: #D9A441;
+    --teal: #237E78;
+    --teal-bright: #2B968E;
+    --teal-deep: #1C6660;
+    --mint: #9ED8CC;
+    --coral: #E76F51;
+    --font: "Futura", "Avenir Next", "Century Gothic", "Gill Sans", "Segoe UI", sans-serif;
+}
+
 * {
     margin: 0;
     padding: 0;
@@ -5,9 +23,13 @@
 }
 
 body {
-    background: #2C2C2C;
-    color: #FFFFFF;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: var(--bg);
+    background-image:
+        radial-gradient(ellipse 70% 50% at 50% 0%, rgba(35, 126, 120, 0.22), transparent 70%),
+        radial-gradient(ellipse 60% 40% at 100% 100%, rgba(217, 164, 65, 0.08), transparent 70%);
+    background-attachment: fixed;
+    color: var(--cream);
+    font-family: var(--font);
     display: flex;
     justify-content: center;
     align-items: center;
@@ -23,19 +45,31 @@ body {
 }
 
 #gameTitle {
-    font-size: 24px;
-    font-weight: 700;
-    letter-spacing: 2px;
-    color: #1A7A6D;
+    font-size: 20px;
+    font-weight: 400;
+    letter-spacing: 7px;
+    color: var(--cream);
     text-transform: uppercase;
-    margin-bottom: 4px;
+    margin: 2px 0 6px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+#gameTitle::before,
+#gameTitle::after {
+    content: '✦';
+    color: var(--mustard);
+    font-size: 14px;
+    letter-spacing: 0;
 }
 
 #gameCanvas {
-    border: 3px solid #555;
-    border-radius: 6px;
+    border: 2px solid var(--line-strong);
+    border-radius: 12px;
     display: block;
-    background: #E8D5B7;
+    background: #1B2726;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55), 0 0 0 6px rgba(27, 39, 38, 0.6);
 }
 
 /* Control Panel */
@@ -44,9 +78,10 @@ body {
     align-items: center;
     justify-content: space-between;
     width: 720px;
-    background: #3A3A4A;
-    border-radius: 8px;
-    padding: 12px 20px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 14px 22px;
     gap: 16px;
 }
 
@@ -54,8 +89,8 @@ body {
 #statsPanel {
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    min-width: 120px;
+    gap: 7px;
+    min-width: 128px;
 }
 
 .stat {
@@ -64,21 +99,24 @@ body {
 }
 
 .stat-label {
-    font-size: 11px;
+    font-size: 10px;
     text-transform: uppercase;
-    color: #999;
-    letter-spacing: 1px;
+    color: var(--mustard);
+    letter-spacing: 2px;
+    font-weight: 600;
 }
 
 .stat-value {
-    font-size: 18px;
-    font-weight: 700;
+    font-size: 20px;
+    font-weight: 400;
+    letter-spacing: 0.5px;
 }
 
 .par-label {
-    color: #BBB;
-    font-size: 10px;
+    color: var(--cream-dim);
+    font-size: 9px;
     font-weight: 400;
+    letter-spacing: 1px;
 }
 
 /* D-Pad */
@@ -104,36 +142,39 @@ body {
 .dpad-btn {
     width: 50px;
     height: 50px;
-    border: none;
-    border-radius: 8px;
-    background: #555;
-    color: #FFF;
-    font-size: 20px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--panel-deep);
+    color: var(--cream);
+    font-size: 16px;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: background 0.1s, transform 0.05s;
+    transition: background 0.1s, transform 0.05s, border-color 0.1s;
     user-select: none;
     -webkit-user-select: none;
 }
 
 .dpad-btn:hover:not(:disabled) {
-    background: #1A7A6D;
+    background: var(--teal);
+    border-color: var(--teal-bright);
 }
 
 .dpad-btn:active:not(:disabled) {
-    background: #15665A;
+    background: var(--teal-deep);
     transform: scale(0.93);
 }
 
 .dpad-center {
-    background: #444;
+    background: var(--mustard);
+    border: none;
     cursor: default;
     border-radius: 50%;
-    width: 30px;
-    height: 30px;
+    width: 14px;
+    height: 14px;
     margin: auto;
+    box-shadow: 0 0 10px rgba(217, 164, 65, 0.5);
 }
 
 /* Right Panel */
@@ -142,87 +183,92 @@ body {
     flex-direction: column;
     align-items: flex-end;
     gap: 6px;
-    min-width: 120px;
+    min-width: 128px;
 }
 
 #batteryContainer {
     display: flex;
     flex-direction: column;
     align-items: flex-end;
-    gap: 3px;
+    gap: 4px;
     width: 100%;
 }
 
 #batteryBar {
     width: 100%;
-    height: 16px;
-    background: #222;
-    border-radius: 8px;
+    height: 12px;
+    background: #121A19;
+    border-radius: 6px;
     overflow: hidden;
-    border: 1px solid #555;
+    border: 1px solid var(--line);
 }
 
 #batteryFill {
     height: 100%;
     width: 100%;
-    background: #4CAF50;
-    border-radius: 8px;
+    background: #5BC8A8;
+    border-radius: 6px;
     transition: width 0.2s, background-color 0.3s;
 }
 
 #batteryText {
-    font-size: 13px;
-    font-weight: 700;
-    color: #4CAF50;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    color: #5BC8A8;
 }
 
 #levelDisplay {
     display: flex;
-    gap: 6px;
+    gap: 8px;
     align-items: baseline;
 }
 
 #levelDisplay .stat-value {
-    font-size: 16px;
+    font-size: 15px;
 }
 
 .action-btn {
-    padding: 6px 16px;
-    border: none;
-    border-radius: 6px;
-    background: #1A7A6D;
-    color: #FFF;
-    font-size: 13px;
+    padding: 7px 16px;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    background: var(--teal);
+    color: var(--cream);
+    font-family: var(--font);
+    font-size: 11px;
     font-weight: 600;
     cursor: pointer;
-    transition: background 0.15s;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
     text-transform: uppercase;
-    letter-spacing: 1px;
+    letter-spacing: 2px;
 }
 
 .action-btn:hover {
-    background: #22957F;
+    background: var(--teal-bright);
 }
 
 .action-btn:active {
-    background: #15665A;
+    background: var(--teal-deep);
 }
 
 .action-btn-quiet {
-    background: #4A4A5A;
+    background: transparent;
+    border-color: var(--line-strong);
+    color: var(--cream-dim);
 }
 
 .action-btn-quiet:hover {
-    background: #5A5A6A;
+    background: rgba(242, 232, 213, 0.08);
+    color: var(--cream);
 }
 
 /* One-line key legend under the panel */
 #legend {
     width: 720px;
     text-align: center;
-    font-size: 11px;
-    color: #8A8A96;
-    letter-spacing: 0.4px;
+    font-size: 10.5px;
+    color: var(--cream-dim);
+    letter-spacing: 0.8px;
 }
 
 /* === Responsive layout === */
@@ -266,12 +312,12 @@ body {
 }
 
 .dpad-center {
-    width: 30px;
-    height: 30px;
+    width: 14px;
+    height: 14px;
 }
 
 #dockDist.warn {
-    color: #FF6B5B;
+    color: var(--coral);
 }
 
 #batteryText.low,
@@ -294,38 +340,45 @@ body {
 }
 
 #levelSelect .level-label {
-    font-size: 11px;
-    color: #8A8A96;
+    font-size: 10px;
+    color: var(--mustard);
     text-transform: uppercase;
-    letter-spacing: 1px;
-    margin-right: 4px;
+    letter-spacing: 2px;
+    font-weight: 600;
+    margin-right: 6px;
 }
 
 .level-btn {
     display: flex;
     flex-direction: column;
     align-items: center;
-    min-width: 44px;
-    padding: 4px 8px;
-    border: 1px solid #555;
-    border-radius: 6px;
-    background: #3A3A4A;
-    color: #FFF;
+    min-width: 46px;
+    padding: 5px 10px;
+    border: 1px solid var(--line-strong);
+    border-radius: 999px;
+    background: var(--panel);
+    color: var(--cream);
+    font-family: var(--font);
     font-size: 13px;
-    font-weight: 700;
+    font-weight: 500;
     cursor: pointer;
     line-height: 1.1;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.level-btn:hover:not(:disabled) {
+    border-color: var(--mint);
 }
 
 .level-btn .level-stars {
-    font-size: 9px;
-    color: #FFD600;
+    font-size: 8px;
+    color: var(--mustard);
     letter-spacing: 1px;
 }
 
 .level-btn.current {
-    border-color: #1A7A6D;
-    background: #1A7A6D;
+    border-color: var(--teal-bright);
+    background: var(--teal);
 }
 
 .level-btn:disabled {
@@ -336,7 +389,7 @@ body {
 .action-btn:focus-visible,
 .dpad-btn:focus-visible,
 .level-btn:focus-visible {
-    outline: 2px solid #9ED8CC;
+    outline: 2px solid var(--mint);
     outline-offset: 2px;
 }
 
@@ -349,7 +402,8 @@ body {
 
 @media (max-width: 640px) {
     #gameTitle {
-        font-size: 18px;
+        font-size: 15px;
+        letter-spacing: 5px;
     }
 
     #controlPanel {
@@ -391,7 +445,7 @@ body {
     .dpad-btn {
         width: 68px;
         height: 68px;
-        font-size: 24px;
+        font-size: 20px;
     }
 }
 
@@ -407,9 +461,10 @@ body {
 /* === Vacuum design panel === */
 .design-panel {
     width: 100%;
-    background: #3A3A4A;
-    border-radius: 8px;
-    padding: 12px 16px 14px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 12px 18px 16px;
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -426,7 +481,7 @@ body {
 }
 
 .design-head .stat-label {
-    font-size: 12px;
+    font-size: 11px;
 }
 
 .design-row {
@@ -448,10 +503,11 @@ body {
     display: flex;
     align-items: center;
     gap: 8px;
-    font-size: 11px;
+    font-size: 10px;
     text-transform: uppercase;
-    color: #BBB;
-    letter-spacing: 1px;
+    color: var(--mustard);
+    letter-spacing: 2px;
+    font-weight: 600;
 }
 
 .color-wheel {
@@ -459,6 +515,7 @@ body {
     cursor: crosshair;
     touch-action: none;
     transition: opacity 0.15s;
+    box-shadow: 0 0 0 3px var(--panel-deep), 0 0 0 4px var(--line-strong);
 }
 
 .design-field.is-off .color-wheel {
@@ -470,7 +527,7 @@ body {
     align-items: center;
     gap: 8px;
     font-size: 12px;
-    color: #DDD;
+    color: var(--cream-dim);
     font-family: ui-monospace, Menlo, monospace;
 }
 
@@ -478,8 +535,8 @@ body {
     display: inline-block;
     width: 22px;
     height: 22px;
-    border-radius: 6px;
-    border: 1px solid rgba(255,255,255,0.3);
+    border-radius: 50%;
+    border: 1px solid var(--line-strong);
 }
 
 /* On/off switch */
@@ -492,7 +549,8 @@ body {
     text-transform: none;
     letter-spacing: 0;
     font-size: 12px;
-    color: #DDD;
+    color: var(--cream);
+    font-weight: 400;
 }
 
 .switch input {
@@ -506,7 +564,7 @@ body {
     width: 38px;
     height: 20px;
     border-radius: 10px;
-    background: #555;
+    background: #3A4A48;
     position: relative;
     transition: background 0.15s;
 }
@@ -519,12 +577,12 @@ body {
     width: 16px;
     height: 16px;
     border-radius: 50%;
-    background: #FFF;
+    background: var(--cream);
     transition: transform 0.15s;
 }
 
 .switch input:checked + .track {
-    background: #1A9A8A;
+    background: var(--teal-bright);
 }
 
 .switch input:checked + .track::after {
@@ -532,19 +590,19 @@ body {
 }
 
 .switch input:focus-visible + .track {
-    outline: 2px solid #9ED8CC;
+    outline: 2px solid var(--mint);
     outline-offset: 2px;
 }
 
 .color-wheel:focus-visible {
-    outline: 2px solid #9ED8CC;
+    outline: 2px solid var(--mint);
     outline-offset: 3px;
 }
 
 /* === Upgrades panel === */
 .upgrade-hint {
     font-size: 12px;
-    color: #BBB;
+    color: var(--cream-dim);
     text-align: center;
 }
 
@@ -564,29 +622,30 @@ body {
 }
 
 .upgrade-group-title {
-    font-size: 11px;
+    font-size: 10px;
     text-transform: uppercase;
-    letter-spacing: 1px;
-    color: #9ED8CC;
+    letter-spacing: 2px;
+    font-weight: 600;
+    color: var(--mint);
 }
 
 .upgrade-card {
-    background: #2E2E3C;
-    border: 1px solid #4A4A5A;
-    border-radius: 8px;
-    padding: 10px 12px;
+    background: var(--panel-deep);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 10px 14px;
     display: flex;
     flex-direction: column;
     gap: 4px;
 }
 
 .upgrade-card.owned {
-    border-color: #1A7A6D;
+    border-color: var(--teal-bright);
 }
 
 .upgrade-name {
     font-size: 14px;
-    font-weight: 700;
+    font-weight: 500;
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -595,17 +654,17 @@ body {
 .upgrade-pips {
     font-size: 11px;
     letter-spacing: 2px;
-    color: #FFD600;
+    color: var(--mustard);
 }
 
 .upgrade-desc {
     font-size: 12px;
-    color: #CCC;
+    color: var(--cream-dim);
 }
 
 .upgrade-now {
     font-size: 11px;
-    color: #9ED8CC;
+    color: var(--mint);
 }
 
 .upgrade-buy {
@@ -617,19 +676,22 @@ body {
 }
 
 .upgrade-buy:disabled {
-    background: #4A4A5A;
-    color: #999;
+    background: var(--panel);
+    border-color: var(--line);
+    color: var(--cream-dim);
     cursor: default;
 }
 
 #btnUpgrades.has-points {
-    background: #B8860B;
+    background: var(--mustard);
+    color: #1B2726;
+    border-color: transparent;
     animation: points-glow 1.6s ease-in-out infinite;
 }
 
 @keyframes points-glow {
-    0%, 100% { box-shadow: 0 0 0 rgba(255, 214, 0, 0); }
-    50% { box-shadow: 0 0 12px rgba(255, 214, 0, 0.6); }
+    0%, 100% { box-shadow: 0 0 0 rgba(217, 164, 65, 0); }
+    50% { box-shadow: 0 0 14px rgba(217, 164, 65, 0.6); }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -651,6 +713,7 @@ body {
 
 body.is-fullscreen {
     background: #000;
+    background-image: none;
     padding: 0;
     overflow: hidden;
     height: 100dvh;
@@ -677,7 +740,8 @@ body.is-fullscreen #gameCanvas {
     /* as tall as the screen allows, or as wide as the room beside the side column allows */
     height: min(100dvh - 20px, (100vw - 20px - 14px - 320px) * 576 / 720);
     width: auto;
-    border-color: #333;
+    border-color: #2A3634;
+    box-shadow: none;
 }
 
 body.is-fullscreen #sidePanel {
@@ -760,8 +824,8 @@ body.is-fullscreen #legend {
 /* === Graphics settings in the design panel === */
 .design-graphics {
     gap: 12px 32px;
-    padding-bottom: 6px;
-    border-bottom: 1px solid #4A4A5C;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--line);
 }
 
 .design-select {
@@ -771,13 +835,13 @@ body.is-fullscreen #legend {
 }
 
 .design-select select {
-    background: #2B2B38;
-    color: #FFF;
-    border: 1px solid #5A5A6C;
-    border-radius: 6px;
-    padding: 5px 8px;
+    background: var(--panel-deep);
+    color: var(--cream);
+    border: 1px solid var(--line-strong);
+    border-radius: 999px;
+    padding: 5px 12px;
     font: inherit;
-    font-size: 13px;
+    font-size: 12px;
 }
 
 .design-select select:disabled {
