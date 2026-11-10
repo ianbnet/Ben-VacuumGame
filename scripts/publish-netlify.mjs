@@ -180,6 +180,9 @@ const served = {};
 for (const name of ['/', ...Object.keys(files)]) {
   const response = await fetch(verifyURL + name, { redirect: 'manual', signal: AbortSignal.timeout(20000) });
   served[name] = response.status;
+  // A new site inherits the team's visitor-access setting, which can be "team login".
+  assert.notEqual(response.status, 401, `${verifyURL} answers 401: visitor access protection is on for this site `
+    + '(Netlify: Project configuration, Access & security). The upload itself matched; open the site to visitors, then run --verify.');
   assert.equal(response.status, 200, `Not served: ${name}`);
   const body = Buffer.from(await response.arrayBuffer());
   assert.equal(sha1(body), files[name === '/' ? '/index.html' : name], `Served bytes differ for ${name}`);
