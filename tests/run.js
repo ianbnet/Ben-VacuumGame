@@ -59,7 +59,7 @@ const sandbox = {
 };
 sandbox.window = sandbox;
 vm.createContext(sandbox);
-for (const f of ['core.js', 'rooms.js', 'upgrades.js', 'design.js', 'scene3d.js', 'render2d.js', 'scene2d.js', 'render3d.js', 'game.js', 'modes.js', 'install.js']) {
+for (const f of ['core.js', 'levels.js', 'rooms.js', 'upgrades.js', 'design.js', 'scene3d.js', 'render2d.js', 'scene2d.js', 'render3d.js', 'game.js', 'modes.js', 'install.js']) {
     vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), sandbox, { filename: f });
 }
 const G = (expr) => vm.runInContext(expr, sandbox);
@@ -312,7 +312,7 @@ check(G('canvasDensityFor(2, 1440)') === 3, 'canvas density is capped at 3');
 check(G('canvasDensityFor(undefined, undefined)') === 1, 'missing display information falls back to 1x');
 
 section('3D scene description');
-check(G('S3_THEMES.length') === G('LEVELS.length'), 'one theme per room');
+check(G('S3_THEMES.length') === G('FLOOR_SIZE'), 'one theme for each room on a floor');
 check(G("s3Facing({ col: 5, row: 2, w: 3, h: 1 })") === 'north', 'a couch near the top wall puts its back to the north');
 check(G("s3Facing({ col: 12, row: 5, w: 2, h: 2 })") === 'east', 'furniture near the right wall faces west');
 let fitAll = true, floorAll = true, headroomAll = true, legsAll = true;
@@ -385,7 +385,7 @@ check(G('typeof paintGlaze') === 'function' && G('typeof paintDust') === 'functi
 check(['drawScene', 'drawLighting', 'drawRoomba', 'drawNpcTrail', 'drawNpcVacuum', 'drawNpcOverlay', 'drawOverlay', 'drawBanner', 'drawHelp', 'drawCleanAnimations', 'drawDustMotes', 'drawBokeh', 'drawFlashlight2D', 'drawDustPuffs', 'createFloorPatterns'].every((f) => G(`typeof ${f}`) === 'function'), 'every routine the game loop calls is defined');
 
 section('Extra rooms: codes and validation');
-check(G('HOUSE_LEVELS') === 6 && G('SPECIAL_LEVEL') === 6 && G('LEVELS.length') === 6, 'the house has six rooms and one more slot after them');
+check(G('HOUSE_LEVELS') === 30 && G('SPECIAL_LEVEL') === 30 && G('LEVELS.length') === 30, 'the house has thirty rooms and one more slot after them');
 let houseRoomsOk = true, roundTripOk = true;
 for (let i = 0; i < 6; i++) {
     const v = G(`validateRoom(Object.assign({ theme: ${i} }, LEVELS[${i}]))`);
@@ -476,12 +476,12 @@ section('Room modes');
 const before = G('JSON.stringify({ points: progress.points, best: progress.best, unlocked: progress.unlocked })');
 G("openDaily('2026-11-09')");
 const dayRoom = G("validateRoom(LEVELS[SPECIAL_LEVEL])");
-check(G('roomMode') === 'daily' && G('currentLevel') === 6 && G('LEVELS.length') === 7 && G('totalDirty') === dayRoom.tiles && G('roomKey()') === 'd2026-11-09' && G('gameState') === 'PLAYING', 'the room of the day loads into the extra slot and starts');
+check(G('roomMode') === 'daily' && G('currentLevel') === G('SPECIAL_LEVEL') && G('LEVELS.length') === G('HOUSE_LEVELS') + 1 && G('totalDirty') === dayRoom.tiles && G('roomKey()') === 'd2026-11-09' && G('gameState') === 'PLAYING', 'the room of the day loads into the extra slot and starts');
 check(G('s3Theme(currentLevel) === S3_THEMES[LEVELS[SPECIAL_LEVEL].theme]') && G('scene.level') === -1, 'it wears its own theme, and what was cached for the slot is thrown away');
 check(G(drivePar) === 'LEVEL_COMPLETE' && G('levelResult.points') === 0 && G('JSON.stringify({ points: progress.points, best: progress.best, unlocked: progress.unlocked })') === before, 'finishing it pays no upgrade points and leaves the house progress alone');
 check(G("progress.runs['d2026-11-09'].moves") === G('moves'), 'it does keep a best run of its own');
 G('nextLevel()');
-check(G('currentLevel') === 6 && G('gameState') === 'LEVEL_COMPLETE', 'there is no next room after the room of the day');
+check(G('currentLevel') === G('SPECIAL_LEVEL') && G('gameState') === 'LEVEL_COMPLETE', 'there is no next room after the room of the day');
 G("openDaily('2999-01-01')");
 check(G('dailyKey') === G('todayKey()'), 'a day that has not happened yet opens today instead');
 G('showHouse()');
@@ -512,7 +512,91 @@ G('build.deleteArmedUntil = performance.now() + 5000; deleteBuiltRoom()');
 check(G('progress.rooms.length') === 2 && G('gameState') === 'EDITING' && G('build.id') === G('progress.rooms[1].id'), 'deleting a room opens the next one you have');
 check(G("JSON.stringify(sanitizeRooms([{ id: 'a1', name: 'Ok', code: '1.0.1.00.' }, { id: 'a1', name: 'Twin', code: '1.0.1.00.' }, { id: 'BAD ID', name: 'x', code: '1.0.1.00.' }, { id: 'b2', name: 'x', code: 'junk' }]))") === '[{"id":"a1","name":"Ok","code":"1.0.1.00."}]', 'saved rooms with a bad id, a twin id or a code that no longer decodes are dropped on load');
 G('showHouse()');
-check(G('roomMode') === 'house' && G('gameState') === 'PLAYING' && G('HOUSE_LEVELS') === 6, 'and the house is still there afterwards');
+check(G('roomMode') === 'house' && G('gameState') === 'PLAYING' && G('HOUSE_LEVELS') === 30, 'and the house is still there afterwards');
+
+// --- The rest of the house -------------------------------------------------------
+
+section('Thirty rooms on five floors');
+{
+    const HOUSE = G('HOUSE_LEVELS'), FLOOR = G('FLOOR_SIZE');
+    check(G('FLOOR_NAMES.length') * FLOOR === HOUSE && HOUSE === 30, 'five named floors of six rooms');
+    check(new Set(LEVELS.slice(0, HOUSE).map((lv) => lv.name)).size === HOUSE, 'every room has a name of its own');
+
+    // How many times the par route has to come home, and how close the far tiles are to the limit
+    const facts = LEVELS.slice(0, HOUSE).map((lv, i) => {
+        const g = G(`buildLevelGrid(${i})`);
+        const dist = G(`bfsFromSource(buildLevelGrid(${i}), LEVELS[${i}].charger.col, LEVELS[${i}].charger.row)`);
+        const reach = G(`roomReach(${lv.batteryCost})`);
+        let tiles = 0, far = 0, lost = 0;
+        for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+            if (g[r][c] !== DIRTY) continue;
+            tiles++;
+            if (dist[r][c] < 0) lost++;
+            else far = Math.max(far, dist[r][c]);
+        }
+        const par = G(`computeParRoute(${i})`);
+        let trips = 0;
+        for (let k = par.approachLength; k < par.fullPath.length; k++) {
+            if (par.fullPath[k].col === lv.charger.col && par.fullPath[k].row === lv.charger.row) trips++;
+        }
+        const pieces = G(`validateRoom({ charger: LEVELS[${i}].charger, obstacles: LEVELS[${i}].obstacles, batteryCost: 1 })`);
+        return { name: lv.name, cost: lv.batteryCost, tiles, far, lost, reach, trips, par: par.totalMoves, sound: pieces.sound };
+    });
+    facts.forEach((f, i) => {
+        check(f.sound && f.lost === 0, `${i + 1} ${f.name}: no overlapping pieces and no tile walled off`);
+        check(f.far <= f.reach, `${i + 1} ${f.name}: every tile can be reached and returned from on one charge (${f.far} of ${f.reach})`);
+        check(f.tiles >= 100, `${i + 1} ${f.name}: a full-size room (${f.tiles} tiles)`);
+    });
+
+    // The real game, no upgrades: drive the par route and the room must come out clean
+    G('showHouse(); progress.upgrades = sanitizeUpgrades({}); progress.unlocked = HOUSE_LEVELS - 1');
+    let finished = 0;
+    for (let i = 0; i < HOUSE; i++) {
+        G(`selectLevel(${i})`);
+        if (G('currentLevel') === i && G('roomba.battery') === 100 && G(drivePar) === 'LEVEL_COMPLETE') finished++;
+        else console.error(`  room ${i + 1} did not finish on the standard battery`);
+    }
+    check(finished === HOUSE, `all thirty rooms can be finished with no upgrades (${finished} of ${HOUSE})`);
+
+    const last = facts[HOUSE - 1];
+    check(facts.every((f, i) => i === HOUSE - 1 || f.trips < last.trips), `room 30 needs more trips home than any other room (${last.trips})`);
+    check(last.cost === 4 && facts.slice(0, HOUSE - 1).every((f) => f.cost <= 3) && last.far === last.reach, 'room 30 alone drains four per move, and its far tiles sit exactly at the limit');
+    const floorTrips = [];
+    for (let f = 0; f < HOUSE / FLOOR; f++) {
+        const rooms = facts.slice(f * FLOOR, (f + 1) * FLOOR);
+        floorTrips.push(rooms.reduce((n, r) => n + r.trips, 0));
+        check(rooms.every((r) => r.trips <= rooms[FLOOR - 1].trips), `${G('FLOOR_NAMES')[f]}: the last room is the hardest on its floor`);
+    }
+    check(floorTrips.every((n, f) => f === 0 || n > floorTrips[f - 1]), `each floor asks more than the one below (${floorTrips.join(', ')} trips)`);
+
+    // The map reader
+    const blank = Array.from({ length: ROWS }, () => '.'.repeat(COLS));
+    const withRows = (rows) => JSON.stringify({ name: 'Test', batteryCost: 1, map: blank.map((r, i) => rows[i] || r) });
+    const sample = G(`levelFromMap(${withRows(['D.SSS.S.BB.B.TT', '......S....B.TT', 'c.p.#.S........'])})`);
+    const has = (type, col, row, w, h) => sample.obstacles.some((o) => o.type === type && o.col === col && o.row === row && o.w === w && o.h === h);
+    check(sample.charger.col === 0 && sample.charger.row === 0 && sample.obstacles.length === 8, 'a map gives a dock and one piece per shape');
+    check(has('couch', 2, 0, 3, 1) && has('couch', 6, 0, 1, 3) && has('petbed', 8, 0, 2, 1) && has('petbed', 11, 0, 1, 2) && has('table', 13, 0, 2, 2), 'sofas, pet beds and tables are read whole, either way round');
+    check(has('chair', 0, 2, 1, 1) && has('plant', 2, 2, 1, 1) && has('wall', 4, 2, 1, 1), 'chairs, plants and walls are one tile each');
+    const refuses = (rows) => { try { G(`levelFromMap(${withRows(rows)})`); return false; } catch (e) { return true; } };
+    check(refuses(['...']) && refuses(['D.T............']) && refuses(['D.SS...........']) && refuses(['D.D............']) && refuses(['...............']) && refuses(['D.x............']), 'a map that is the wrong size, has a broken piece, two docks, no dock or a stray letter is refused');
+
+    // The picker pages by floor
+    G('showHouse(); progress.unlocked = HOUSE_LEVELS - 1; selectLevel(13)');
+    check(G('currentLevel') === 13 && G('levelFloor') === 2, 'the picker opens on the floor of the room being played');
+    G('showLevelFloor(4)');
+    check(G('levelFloor') === 4 && G('currentLevel') === 13 && G('gameState') === 'PLAYING', 'the arrows browse other floors without leaving the room');
+    G('showLevelFloor(99)');
+    check(G('levelFloor') === 4, 'and stop at the top floor');
+    G('selectLevel(0)');
+    check(G('levelFloor') === 0, 'picking a room brings the picker back to its floor');
+
+    // A save from the six-room house
+    G(`localStorage.setItem(SAVE_KEY, JSON.stringify({ unlocked: 5, points: 18, best: { 0: { moves: 200, stars: 3 }, 5: { moves: 260, stars: 3 } } })); loadProgress()`);
+    check(G('progress.unlocked') === 6, 'a player who finished the old last room finds room 7 open');
+    G(`localStorage.setItem(SAVE_KEY, JSON.stringify({ unlocked: 2, best: { 0: { moves: 200, stars: 3 }, 1: { moves: 190, stars: 2 } } })); loadProgress()`);
+    check(G('progress.unlocked') === 2, 'and a player part way through stays where they were');
+    G(`localStorage.removeItem(SAVE_KEY); progress.unlocked = 0; progress.best = {}; progress.points = 0; showHouse()`);
+}
 
 // --- Home screen install ------------------------------------------------------
 

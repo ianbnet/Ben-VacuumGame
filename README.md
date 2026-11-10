@@ -1,6 +1,6 @@
 # Roomba Vacuum
 
-A browser game: steer a robot vacuum around a 15×12 room, clean every tile, and get back to the dock before the battery dies. Six rooms in the house, a new room every day, rooms you build yourself, a par score to beat on each, the ghost of your own best run to race, and a first-person 3D view you can switch to at any time.
+A browser game: steer a robot vacuum around a 15×12 room, clean every tile, and get back to the dock before the battery dies. Thirty rooms on the five floors of the house, a new room every day, rooms you build yourself, a par score to beat on each, the ghost of your own best run to race, and a first-person 3D view you can switch to at any time.
 
 No build step, no dependencies. Plain HTML, CSS and canvas.
 
@@ -36,7 +36,7 @@ The on-screen d-pad, level buttons and panel buttons do the same things and work
 
 The bar at the top of the page picks what to play.
 
-- **The House.** The six rooms, in order. Stars here earn upgrade points.
+- **The House.** Thirty rooms on five floors, in order. Each floor ends on a harder room, and room 30 is the hardest of all. The picker shows one floor at a time; its arrows browse the others. Stars here earn upgrade points.
 - **Room of the Day.** One new room each calendar day, generated from the date, so it is the same room for everyone. The arrows go back through earlier days. There are no streaks and nothing is lost by skipping a day. It keeps a best run and pays no upgrade points.
 - **Build a Room.** An editor on the board: place sofas, tables, chairs, plants, pet beds, walls and the dock, pick one of the six themes and a battery difficulty, and play it. The game checks that every tile can be reached and returned from on one charge and marks the tiles that cannot. Rooms save as you build. **Copy link** makes a link that opens the room for someone else, with no server involved: the whole room is in the link. While building, click to place, drag to paint walls or erase, R turns a sofa or pet bed, 1 to 8 pick a tool, Space plays.
 - **Race my best.** Finish any room and the run is saved. Next time a gold ghost drives it, one step for each of yours, and the panel says how many tiles ahead or behind you are. It shows in 2D, in the GPU 3D view, and as a dot on the minimap in the Classic 3D view.
@@ -49,9 +49,10 @@ The bar at the top of the page picks what to play.
 
 | File | Holds |
 |---|---|
-| `core.js` | Constants, the obstacle catalogue, the six levels, and the par solver (BFS plus greedy nearest-tile). No DOM. |
+| `core.js` | Constants, the obstacle catalogue, the first six levels, and the par solver (BFS plus greedy nearest-tile). No DOM. |
 | `rooms.js` | Rooms beyond the house, with no DOM: the piece catalogue, validation, the room code used for saving and share links, dates, the daily generator, the editor's placement rules, and the replay of a recorded run. |
 | `game.js` | Game state, level setup, movement rules, input, saved progress, room modes, recorded runs and the best-run ghost, level select, the frame loop. |
+| `levels.js` | Rooms 7 to 30, drawn as text maps, and the reader that turns a map into a level. Counts the house. |
 | `modes.js` | The bar at the top (The House, Room of the Day, Build a Room, Race my best) and the room editor on the board. |
 | `install.js` | The home screen prompt for phones and tablets. |
 | `render2d.js` | The top-down view in the atomic-age themes: the furniture painters (sofa, kidney table, shell chair, snake plant, pet bed, counters, crates, neon panels), the chrome dock, the vacuum and its ghost, cleaning effects, overlays, banner and help. |
@@ -67,7 +68,7 @@ The scripts are classic (non-module) scripts that share one global scope; `index
 
 Progress (highest level reached, best moves and stars per level, best runs, built rooms), the mute setting and the vacuum design are saved in `localStorage`.
 
-Extra rooms are loaded into one slot after the six house levels (`LEVELS[SPECIAL_LEVEL]`), so every renderer draws them from the same level data. The room for a date comes from `generateDailyRoom` in `rooms.js`; changing that function changes every past and future day for everyone, and a test pins one date to catch it.
+Extra rooms are loaded into one slot after the thirty house levels (`LEVELS[SPECIAL_LEVEL]`), so every renderer draws them from the same level data. The room for a date comes from `generateDailyRoom` in `rooms.js`; changing that function changes every past and future day for everyone, and a test pins one date to catch it.
 
 ## Tests
 
@@ -127,7 +128,7 @@ page's chrome follows the same palette.
 ![Chrome Diner: red stools and a chrome dinette on checkerboard lino](docs/img/3d-chrome-diner.jpg)
 
 The first-person view is drawn by a Three.js renderer over WebGL2 (`render3d-gl.js`), styled as a
-1950s atomic-age home: six themed rooms, real sunlight through the blinds, glossy floors that
+1950s atomic-age home: six room themes that repeat on every floor, real sunlight through the blinds, glossy floors that
 reflect the room as you clean them, depth of field and film grain. Three.js r170 is vendored under
 `vendor/three/` and loaded through an import map, so there is still no build step.
 

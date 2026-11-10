@@ -175,8 +175,14 @@ function loadProgress() {
         if (!raw) return;
         const s = JSON.parse(raw);
         if (s && typeof s === 'object') {
-            progress.unlocked = Math.min(HOUSE_LEVELS - 1, Math.max(0, s.unlocked | 0));
             progress.best = s.best && typeof s.best === 'object' ? s.best : {};
+            // A save from a smaller house stops at what was its last room. Finishing a room
+            // has earned the next one, so open it now that there is one.
+            let reached = Math.max(0, s.unlocked | 0);
+            for (const k of Object.keys(progress.best)) {
+                if (/^\d+$/.test(k)) reached = Math.max(reached, Number(k) + 1);
+            }
+            progress.unlocked = Math.min(HOUSE_LEVELS - 1, reached);
             progress.bestScore = s.bestScore | 0;
             progress.points = Math.max(0, s.points | 0);
             progress.upgrades = sanitizeUpgrades(s.upgrades);
@@ -357,15 +363,49 @@ function recordLevelResult(levelIndex, result) {
 
 // --- Level select ------------------------------------------------------------
 
+// The picker shows one floor of the house at a time. It follows the room being played,
+// and the arrows browse the other floors without leaving that room.
+let levelFloor = 0;
+let levelFloorFor = -1;
+
+function levelFloorCount() {
+    return Math.ceil(HOUSE_LEVELS / FLOOR_SIZE);
+}
+
+function showLevelFloor(floor) {
+    levelFloor = Math.max(0, Math.min(levelFloorCount() - 1, floor));
+    buildLevelSelect();
+}
+
 function buildLevelSelect() {
     const el = document.getElementById('levelSelect');
     if (!el) return;
+    const anchor = Math.min(HOUSE_LEVELS - 1, roomMode === 'house' ? currentLevel : houseLevel);
+    if (anchor !== levelFloorFor) {
+        levelFloorFor = anchor;
+        levelFloor = Math.floor(anchor / FLOOR_SIZE);
+    }
+    const floors = levelFloorCount();
+    levelFloor = Math.max(0, Math.min(floors - 1, levelFloor));
     el.innerHTML = '';
+    const arrow = (text, name, to) => {
+        const b = document.createElement('button');
+        b.className = 'level-nav';
+        b.textContent = text;
+        b.setAttribute('aria-label', name);
+        b.title = name;
+        b.disabled = to < 0 || to >= floors;
+        b.addEventListener('click', () => showLevelFloor(to));
+        return b;
+    };
+    el.appendChild(arrow('\u2039', 'Floor below', levelFloor - 1));
     const label = document.createElement('span');
     label.className = 'level-label';
-    label.textContent = 'Levels';
+    label.textContent = FLOOR_NAMES[levelFloor] || `Floor ${levelFloor + 1}`;
     el.appendChild(label);
-    LEVELS.slice(0, HOUSE_LEVELS).forEach((lv, i) => {
+    const first = levelFloor * FLOOR_SIZE;
+    LEVELS.slice(first, Math.min(HOUSE_LEVELS, first + FLOOR_SIZE)).forEach((lv, k) => {
+        const i = first + k;
         const b = document.createElement('button');
         b.className = 'level-btn' + (roomMode === 'house' && i === currentLevel ? ' current' : '');
         b.textContent = String(i + 1);
@@ -385,6 +425,7 @@ function buildLevelSelect() {
         });
         el.appendChild(b);
     });
+    el.appendChild(arrow('\u203A', 'Floor above', levelFloor + 1));
 }
 
 function selectLevel(i) {

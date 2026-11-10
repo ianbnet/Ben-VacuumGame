@@ -348,6 +348,39 @@ body {
     margin-right: 6px;
 }
 
+#levelSelect .level-label {
+    min-width: 92px;
+    text-align: center;
+}
+
+.level-nav {
+    width: 28px;
+    height: 28px;
+    padding: 0 0 2px;
+    border: 1px solid var(--line-strong);
+    border-radius: 50%;
+    background: transparent;
+    color: var(--cream);
+    font-family: var(--font);
+    font-size: 17px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.level-nav:hover:not(:disabled) {
+    border-color: var(--mint);
+}
+
+.level-nav:disabled {
+    opacity: 0.25;
+    cursor: default;
+}
+
+.level-nav:focus-visible {
+    outline: 2px solid var(--mint);
+    outline-offset: 2px;
+}
+
 .level-btn {
     display: flex;
     flex-direction: column;

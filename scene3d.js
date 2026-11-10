@@ -1,5 +1,5 @@
 // Scene description for the GPU renderer (render3d-gl.js): a 1950s atomic-age take on the
-// six rooms. Themes, furniture built from simple parts, the room's architecture and its
+// six room themes, one for each place on a floor. Themes, furniture built from simple parts, the room's architecture and its
 // decor are all plain data here, with no DOM or WebGL, so the tests can check them.
 //
 // Units: one tile is one unit (about half a metre); x runs along columns, z along rows and y

@@ -227,10 +227,7 @@ const LEVELS = [
     },
 ];
 
-// The house is these rooms. One more slot after them holds whichever extra room is loaded
-// (the room of the day, or one the player built); see rooms.js.
-const HOUSE_LEVELS = LEVELS.length;
-const SPECIAL_LEVEL = HOUSE_LEVELS;
+// These six are the ground floor. levels.js adds the other floors and then counts the house.
 
 // === PAR SOLVER ===
 
