@@ -5,6 +5,8 @@
   "description": "Roomba Vacuum: a browser game about cleaning a room on a grid, in 2D or first person",
   "scripts": {
     "start": "python3 serve.py 3000",
-    "test": "node tests/run.js"
+    "test": "node tests/run.js",
+    "deploy:check": "node scripts/publish-netlify.mjs --check",
+    "deploy": "node tests/run.js && node scripts/publish-netlify.mjs --publish"
   }
 }

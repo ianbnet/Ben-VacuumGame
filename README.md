@@ -74,6 +74,22 @@ Extra rooms are loaded into one slot after the six house levels (`LEVELS[SPECIAL
 node tests/run.js
 ```
 
+## Publishing
+
+The game is live at <https://robot-vacuum-game.netlify.app>, as its own Netlify project.
+`scripts/publish-netlify.mjs` uploads only what the page needs: `index.html`, the files it
+loads and the vendored three.js. Docs, tests and tools stay behind.
+
+```sh
+npm run deploy:check   # list what would ship; no network
+npm run deploy         # run the tests, publish, then check every file Netlify serves
+```
+
+Publishing needs everything committed and the git-ignored `.env.netlify.local`, which holds
+`NETLIFY_AUTH_TOKEN` and `NETLIFY_SITE_ID`. Netlify tokens expire, so an HTTP 401 means it is
+time for a new one. The script refuses to publish to any site not named `robot-vacuum-game`.
+Room share links carry the site address, so renaming the site breaks links already sent.
+
 ## History
 
 Built on Replit in March 2026. Reworked in November 2026 from the assessment in `docs/assessment-2026-11-07.md`; `docs/changes-2026-11-07.md` lists what changed.
