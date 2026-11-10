@@ -80,9 +80,12 @@ node tests/run.js
 
 On a phone or tablet the game offers to put itself on the home screen, where it opens full screen
 under its own icon. Android browsers show their install sheet from the **Add it** button; iOS has
-no such sheet, so there the bar names the two taps (Share, then Add to Home Screen). The bar shows
-once, and the **Home screen** button brings it back. It never appears on a desktop browser or in a
-game already opened from its icon.
+no such sheet, so there the bar names the two taps (Share, then Add to Home Screen). The bar never
+appears on a desktop browser or in a game already opened from its icon.
+
+There are two ways to say no. **Not now** puts the bar away for a week. **Don't ask again** puts it
+away for good on that device; it never offers itself again. The quiet **Home screen** button among
+the controls stays, for a player who changes their mind.
 
 `manifest.json` and `icons/` are what the phone reads. The icon is drawn in code
 (`scripts/icon-art.js`); open `scripts/make-icons.html` through the dev server to redraw and save

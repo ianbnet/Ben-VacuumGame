@@ -617,7 +617,26 @@ section('Home screen install');
     check(ios.action === null && /Share/.test(ios.steps) && /Add to Home Screen/.test(ios.steps), 'iOS gets the two taps spelled out, with no button it cannot honour');
     check(G("installCopy('android', true)").action === 'Add it' && G("installCopy('android', false)").action === null && /Add to Home screen/.test(G("installCopy('android', false)").steps), 'Android gets a button when the browser offers a prompt and the menu steps when it does not');
     check(G('installCopy(null, false)') === null, 'no platform, no words');
-    check(G('installDismissed()') === false && (G('installRemember()'), G('installDismissed()')) === true, '"Not now" is remembered');
+    // Two ways to say no: "Not now" sleeps for a week, "Don't ask again" is for good
+    const DAY = 24 * 60 * 60 * 1000, T0 = Date.UTC(2026, 10, 10);
+    const stored = () => G('localStorage.getItem(INSTALL_KEY)');
+    G('localStorage.removeItem(INSTALL_KEY)');
+    check(G(`installShouldAsk(${T0})`) === true && stored() === null, 'a new player is offered the home screen');
+    G(`installSnooze(${T0})`);
+    check(G(`installShouldAsk(${T0 + DAY})`) === false && G(`installShouldAsk(${T0 + 6.9 * DAY})`) === false, '"Not now" keeps the bar away for the rest of the week');
+    check(G(`installShouldAsk(${T0 + 7 * DAY})`) === true, 'and it offers itself again a week later');
+    check(G(`installShouldAsk(${T0 - 30 * DAY})`) === true, 'a clock that jumped back does not hide it for ever');
+    G('installNever()');
+    check(stored() === 'never' && G(`installShouldAsk(${T0})`) === false && G(`installShouldAsk(${T0 + 3650 * DAY})`) === false, '"Don\'t ask again" means it never comes back');
+    G(`installSnooze(${T0}); installNever()`);
+    check(G(`installShouldAsk(${T0 + 365 * DAY})`) === false, 'even after an earlier "Not now"');
+    G("localStorage.setItem(INSTALL_KEY, 'dismissed')");
+    check(G(`installShouldAsk(${T0})`) === false && stored() === `later:${T0}` && G(`installShouldAsk(${T0 + 7 * DAY})`) === true, 'a "Not now" saved by the first version counts as a week from today, not as never');
+    G("localStorage.setItem(INSTALL_KEY, 'later:banana')");
+    check(G(`installShouldAsk(${T0})`) === true, 'a saved answer that makes no sense is ignored');
+    G('localStorage.removeItem(INSTALL_KEY)');
+    const barPage = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+    check(/id="installLater"[^>]*>Not now</.test(barPage) && /id="installNever"[^>]*>Don't ask again</.test(barPage), 'the bar carries both answers');
 
     const page = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
     check(/<link rel="manifest" href="manifest\.json">/.test(page) && /<link rel="apple-touch-icon" href="icons\/apple-touch-icon\.png">/.test(page) && /<script src="install\.js"><\/script>/.test(page), 'the page links the manifest, the iOS icon and the install script');

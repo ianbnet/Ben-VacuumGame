@@ -1180,8 +1180,39 @@ body.is-fullscreen #dailyLabel {
     color: var(--mint);
 }
 
-#installBar .action-btn {
+.install-actions {
     flex: none;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px 8px;
+}
+
+#installAdd[hidden] {
+    display: none;
+}
+
+.install-never {
+    padding: 8px 6px;
+    border: 0;
+    background: none;
+    color: var(--cream-dim);
+    font-family: var(--font);
+    font-size: 11px;
+    letter-spacing: 0.4px;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    cursor: pointer;
+}
+
+.install-never:hover {
+    color: var(--cream);
+}
+
+.install-never:focus-visible {
+    outline: 2px solid var(--mint);
+    outline-offset: 2px;
 }
 
 body.is-fullscreen #installBar {
@@ -1198,7 +1229,7 @@ body.is-fullscreen #installBar {
         flex-basis: calc(100% - 52px);
     }
 
-    #installBar .action-btn {
+    .install-actions {
         margin-left: auto;
     }
 }

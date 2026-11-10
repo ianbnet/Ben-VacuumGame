@@ -1,9 +1,13 @@
 // Offers to put the game on the home screen of a phone or tablet.
 // Android browsers hand the page an install prompt it can show on a tap. iOS has
-// nothing like that, so there the bar just names the two taps. It shows once;
-// "Not now" is remembered, and the Home screen button brings it back.
+// nothing like that, so there the bar just names the two taps.
+//
+// The player has two ways to say no. "Not now" puts the bar away for a week.
+// "Don't ask again" puts it away for good: it never offers itself again on this
+// device. The quiet Home screen button stays, for a player who changes their mind.
 
 const INSTALL_KEY = 'ben-vacuum-game.install.v1';
+const INSTALL_SNOOZE_MS = 7 * 24 * 60 * 60 * 1000;
 
 // Which home screen route this device has: 'ios', 'android', or null for a
 // desktop browser or a game that is already running from its icon.
@@ -34,13 +38,36 @@ function installCopy(platform, canPrompt) {
     return null;
 }
 
-function installDismissed() {
-    try { return localStorage.getItem(INSTALL_KEY) === 'dismissed'; } catch (e) { return false; }
+// What the player last told the bar: nothing, "not now" (and when), or "never".
+function installAnswer() {
+    let raw = null;
+    try { raw = localStorage.getItem(INSTALL_KEY); } catch (e) { return { kind: 'none' }; }
+    if (raw === 'never') return { kind: 'never' };
+    // The first version had one button, labelled "Not now", and saved this word.
+    if (raw === 'dismissed') return { kind: 'later', at: null };
+    const m = /^later:(\d+)$/.exec(raw || '');
+    return m ? { kind: 'later', at: Number(m[1]) } : { kind: 'none' };
 }
 
-function installRemember() {
-    try { localStorage.setItem(INSTALL_KEY, 'dismissed'); } catch (e) { /* private mode: ask again next time */ }
+// Should the bar offer itself on this visit? Never after "Don't ask again".
+function installShouldAsk(now) {
+    const answer = installAnswer();
+    if (answer.kind === 'never') return false;
+    if (answer.kind === 'none') return true;
+    if (answer.at === null) {
+        installSnooze(now); // an old "Not now" with no date: the week starts today
+        return false;
+    }
+    // A clock that has jumped backwards must not hide the bar for ever
+    return Math.abs(now - answer.at) >= INSTALL_SNOOZE_MS;
 }
+
+function installSave(value) {
+    try { localStorage.setItem(INSTALL_KEY, value); } catch (e) { /* storage blocked: it will ask again next visit */ }
+}
+
+function installSnooze(now) { installSave('later:' + Math.floor(now)); }
+function installNever() { installSave('never'); }
 
 const install = { platform: null, deferred: null, offered: false };
 
@@ -58,15 +85,25 @@ function showInstallBar() {
     const add = document.getElementById('installAdd');
     add.hidden = !copy.action;
     if (copy.action) add.textContent = copy.action;
-    document.getElementById('installLater').textContent = copy.action ? 'Not now' : 'Got it';
     bar.hidden = false;
     return true;
 }
 
-function hideInstallBar(remember) {
+function hideInstallBar() {
     const bar = document.getElementById('installBar');
     if (bar) bar.hidden = true;
-    if (remember) installRemember();
+}
+
+// "Not now": away for a week.
+function installNotNow() {
+    installSnooze(Date.now());
+    hideInstallBar();
+}
+
+// "Don't ask again": away for good.
+function installStopAsking() {
+    installNever();
+    hideInstallBar();
 }
 
 // The browser's own install sheet. Only Android gives the page one.
@@ -75,14 +112,18 @@ async function installAsk() {
     if (!prompt) return;
     install.deferred = null;
     prompt.prompt();
-    try { await prompt.userChoice; } catch (e) { /* closed without choosing */ }
-    hideInstallBar(true);
+    let choice = null;
+    try { choice = await prompt.userChoice; } catch (e) { /* closed without choosing */ }
+    // Backing out of the browser's sheet is a "not now", not a "never"
+    if (!choice || choice.outcome !== 'accepted') installSnooze(Date.now());
+    hideInstallBar();
 }
 
 function installFinished() {
     install.platform = null;
     install.deferred = null;
-    hideInstallBar(true);
+    installNever(); // it is on the home screen; nothing left to ask
+    hideInstallBar();
     const btn = document.getElementById('btnInstall');
     if (btn) btn.hidden = true;
 }
@@ -105,13 +146,14 @@ function initInstall() {
     });
     window.addEventListener('appinstalled', installFinished);
     document.getElementById('installAdd').addEventListener('click', installAsk);
-    document.getElementById('installLater').addEventListener('click', () => hideInstallBar(true));
-    btn.addEventListener('click', () => { if (bar.hidden) showInstallBar(); else hideInstallBar(false); });
+    document.getElementById('installLater').addEventListener('click', installNotNow);
+    document.getElementById('installNever').addEventListener('click', installStopAsking);
+    btn.addEventListener('click', () => { if (bar.hidden) showInstallBar(); else hideInstallBar(); });
 
     if (!install.platform) return;
     btn.hidden = false;
     // Give the page a moment to settle, and the browser a moment to offer its prompt.
-    if (!installDismissed()) setTimeout(() => { if (install.platform) showInstallBar(); }, 1500);
+    if (installShouldAsk(Date.now())) setTimeout(() => { if (install.platform) showInstallBar(); }, 1500);
 }
 
 initInstall();
