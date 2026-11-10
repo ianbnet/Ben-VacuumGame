@@ -83,7 +83,7 @@ no such sheet, so there the bar names the two taps (Share, then Add to Home Scre
 once, and the **Home screen** button brings it back. It never appears on a desktop browser or in a
 game already opened from its icon.
 
-`manifest.webmanifest` and `icons/` are what the phone reads. The icon is drawn in code
+`manifest.json` and `icons/` are what the phone reads. The icon is drawn in code
 (`scripts/icon-art.js`); open `scripts/make-icons.html` through the dev server to redraw and save
 the PNGs. There is no service worker, so the icon needs a connection to load the game. On iOS a
 home screen game keeps its own saves, separate from the same site in Safari.

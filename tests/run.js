@@ -536,13 +536,13 @@ section('Home screen install');
     check(G('installDismissed()') === false && (G('installRemember()'), G('installDismissed()')) === true, '"Not now" is remembered');
 
     const page = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
-    check(/<link rel="manifest" href="manifest\.webmanifest">/.test(page) && /<link rel="apple-touch-icon" href="icons\/apple-touch-icon\.png">/.test(page) && /<script src="install\.js"><\/script>/.test(page), 'the page links the manifest, the iOS icon and the install script');
+    check(/<link rel="manifest" href="manifest\.json">/.test(page) && /<link rel="apple-touch-icon" href="icons\/apple-touch-icon\.png">/.test(page) && /<script src="install\.js"><\/script>/.test(page), 'the page links the manifest, the iOS icon and the install script');
 
     const pngSize = (file) => {
         const b = fs.readFileSync(path.join(root, file));
         return b.subarray(1, 4).toString() === 'PNG' ? `${b.readUInt32BE(16)}x${b.readUInt32BE(20)}` : 'not a png';
     };
-    const manifest = JSON.parse(fs.readFileSync(path.join(root, 'manifest.webmanifest'), 'utf8'));
+    const manifest = JSON.parse(fs.readFileSync(path.join(root, 'manifest.json'), 'utf8'));
     check(manifest.display === 'standalone' && !!manifest.start_url && manifest.name.length > 0 && manifest.short_name.length <= 12, 'the manifest opens the game full screen under a name short enough for an icon label');
     const has = (size, purpose) => manifest.icons.some((i) => i.sizes === size && i.purpose === purpose);
     check(has('192x192', 'any') && has('512x512', 'any') && has('512x512', 'maskable'), 'the manifest lists the icon sizes Android asks for, one of them maskable');

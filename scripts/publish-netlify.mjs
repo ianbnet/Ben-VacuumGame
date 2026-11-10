@@ -42,7 +42,7 @@ const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const pageRefs = [...html.matchAll(/\b(?:src|href)\s*=\s*"([^"]+)"/g)].map(m => m[1]).filter(isLocal).map(clean);
 const shipped = new Set(['index.html', ...pageRefs, ...[...tracked].filter(name => name.startsWith(VENDOR))]);
 // The web app manifest names the home screen icons; they ship with it.
-for (const name of pageRefs.filter(ref => ref.endsWith('.webmanifest'))) {
+for (const name of pageRefs.filter(ref => path.posix.basename(ref) === 'manifest.json')) {
   const manifest = JSON.parse(fs.readFileSync(path.join(root, name), 'utf8'));
   for (const icon of manifest.icons ?? []) {
     if (isLocal(icon.src)) shipped.add(path.posix.normalize(path.posix.join(path.posix.dirname(name), clean(icon.src))));
@@ -52,7 +52,7 @@ for (const name of pageRefs.filter(ref => ref.endsWith('.webmanifest'))) {
 for (const name of shipped) {
   assert(!name.startsWith('..') && !path.isAbsolute(name), `Refusing a path outside the game: ${name}`);
   assert(tracked.has(name), `index.html needs ${name}, but git does not track it.`);
-  assert(/^(?:index\.html|style\.css|manifest\.webmanifest|[\w-]+\.js|icons\/[\w-]+\.png|vendor\/three\/[\w./-]+)$/.test(name), `Unexpected deploy file: ${name}`);
+  assert(/^(?:index\.html|style\.css|manifest\.json|[\w-]+\.js|icons\/[\w-]+\.png|vendor\/three\/[\w./-]+)$/.test(name), `Unexpected deploy file: ${name}`);
   const stat = fs.lstatSync(path.join(root, name));
   assert(stat.isFile() && !stat.isSymbolicLink(), `Only regular files may ship: ${name}`);
 }
