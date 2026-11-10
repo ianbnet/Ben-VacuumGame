@@ -4,12 +4,26 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Roomba Vacuum Game</title>
+    <meta name="theme-color" content="#16211F">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="apple-mobile-web-app-title" content="Vacuum">
     <link rel="stylesheet" href="style.css">
     <script type="importmap">{ "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/" } }</script>
 </head>
 <body>
     <div id="gameContainer">
         <h1 id="gameTitle">Roomba Vacuum</h1>
+        <div id="installBar" role="region" aria-label="Add to home screen" hidden>
+            <img src="icons/icon-192.png" alt="" width="40" height="40">
+            <div class="install-text"><strong id="installTitle"></strong><span id="installSteps"></span></div>
+            <button id="installAdd" class="action-btn" hidden>Add it</button>
+            <button id="installLater" class="action-btn action-btn-quiet">Not now</button>
+        </div>
         <div id="modeBar">
             <div class="mode-tabs" role="group" aria-label="What to play">
                 <button class="mode-tab current" id="tabHouse" aria-pressed="true">The House</button>
@@ -101,6 +115,7 @@
                 <button id="btnDesign" class="action-btn action-btn-quiet" aria-expanded="false" aria-controls="designPanel">Design</button>
                 <button id="btnUpgrades" class="action-btn action-btn-quiet" aria-expanded="false" aria-controls="upgradePanel">Upgrades</button>
                 <button id="btnGhost" class="action-btn action-btn-quiet">Ghost</button>
+                <button id="btnInstall" class="action-btn action-btn-quiet" hidden>Home screen</button>
             </div>
         </div>
         <div id="upgradePanel" class="design-panel" hidden>
@@ -157,6 +172,7 @@
     <script src="audio.js"></script>
     <script src="game.js"></script>
     <script src="modes.js"></script>
+    <script src="install.js"></script>
     <script type="module" src="render3d-gl.js"></script>
 </body>
 </html>

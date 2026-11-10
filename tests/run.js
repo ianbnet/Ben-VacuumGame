@@ -59,7 +59,7 @@ const sandbox = {
 };
 sandbox.window = sandbox;
 vm.createContext(sandbox);
-for (const f of ['core.js', 'rooms.js', 'upgrades.js', 'design.js', 'scene3d.js', 'render2d.js', 'scene2d.js', 'render3d.js', 'game.js', 'modes.js']) {
+for (const f of ['core.js', 'rooms.js', 'upgrades.js', 'design.js', 'scene3d.js', 'render2d.js', 'scene2d.js', 'render3d.js', 'game.js', 'modes.js', 'install.js']) {
     vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), sandbox, { filename: f });
 }
 const G = (expr) => vm.runInContext(expr, sandbox);
@@ -513,6 +513,42 @@ check(G('progress.rooms.length') === 2 && G('gameState') === 'EDITING' && G('bui
 check(G("JSON.stringify(sanitizeRooms([{ id: 'a1', name: 'Ok', code: '1.0.1.00.' }, { id: 'a1', name: 'Twin', code: '1.0.1.00.' }, { id: 'BAD ID', name: 'x', code: '1.0.1.00.' }, { id: 'b2', name: 'x', code: 'junk' }]))") === '[{"id":"a1","name":"Ok","code":"1.0.1.00."}]', 'saved rooms with a bad id, a twin id or a code that no longer decodes are dropped on load');
 G('showHouse()');
 check(G('roomMode') === 'house' && G('gameState') === 'PLAYING' && G('HOUSE_LEVELS') === 6, 'and the house is still there afterwards');
+
+// --- Home screen install ------------------------------------------------------
+
+section('Home screen install');
+{
+    const platform = (ua, touchPoints, standalone) => G(`installPlatform(${JSON.stringify({ ua, touchPoints, standalone })})`);
+    const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
+    const MAC = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15';
+    const PIXEL = 'Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36';
+    const WINDOWS = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
+    check(platform(IPHONE, 5, false) === 'ios', 'an iPhone is offered the iOS steps');
+    check(platform(MAC, 5, false) === 'ios', 'an iPad, which says it is a Mac but has a touch screen, is offered the iOS steps');
+    check(platform(MAC, 0, false) === null && platform(WINDOWS, 0, false) === null, 'a desktop browser is not asked at all');
+    check(platform(PIXEL, 5, false) === 'android', 'an Android phone is offered the Android route');
+    check(platform(IPHONE, 5, true) === null && platform(PIXEL, 5, true) === null, 'a game already opened from its icon is not asked again');
+
+    const ios = G("installCopy('ios', false)");
+    check(ios.action === null && /Share/.test(ios.steps) && /Add to Home Screen/.test(ios.steps), 'iOS gets the two taps spelled out, with no button it cannot honour');
+    check(G("installCopy('android', true)").action === 'Add it' && G("installCopy('android', false)").action === null && /Add to Home screen/.test(G("installCopy('android', false)").steps), 'Android gets a button when the browser offers a prompt and the menu steps when it does not');
+    check(G('installCopy(null, false)') === null, 'no platform, no words');
+    check(G('installDismissed()') === false && (G('installRemember()'), G('installDismissed()')) === true, '"Not now" is remembered');
+
+    const page = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+    check(/<link rel="manifest" href="manifest\.webmanifest">/.test(page) && /<link rel="apple-touch-icon" href="icons\/apple-touch-icon\.png">/.test(page) && /<script src="install\.js"><\/script>/.test(page), 'the page links the manifest, the iOS icon and the install script');
+
+    const pngSize = (file) => {
+        const b = fs.readFileSync(path.join(root, file));
+        return b.subarray(1, 4).toString() === 'PNG' ? `${b.readUInt32BE(16)}x${b.readUInt32BE(20)}` : 'not a png';
+    };
+    const manifest = JSON.parse(fs.readFileSync(path.join(root, 'manifest.webmanifest'), 'utf8'));
+    check(manifest.display === 'standalone' && !!manifest.start_url && manifest.name.length > 0 && manifest.short_name.length <= 12, 'the manifest opens the game full screen under a name short enough for an icon label');
+    const has = (size, purpose) => manifest.icons.some((i) => i.sizes === size && i.purpose === purpose);
+    check(has('192x192', 'any') && has('512x512', 'any') && has('512x512', 'maskable'), 'the manifest lists the icon sizes Android asks for, one of them maskable');
+    check(manifest.icons.every((i) => i.type === 'image/png' && pngSize(i.src) === i.sizes), 'every icon file is a PNG of the size the manifest claims');
+    check(pngSize('icons/apple-touch-icon.png') === '180x180', 'the iOS icon is 180 pixels square');
+}
 
 console.log(`\n${passes} passed, ${failures} failed`);
 process.exit(failures ? 1 : 0);

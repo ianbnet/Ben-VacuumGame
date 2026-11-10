@@ -1,5 +1,6 @@
 // Publishes the game to Netlify. Only the files the page needs are sent:
-// index.html, everything it loads, and the vendored three.js. No docs, tests or tools.
+// index.html, everything it loads, the home screen icons and the vendored three.js.
+// No docs, tests or tools.
 //
 //   node scripts/publish-netlify.mjs --check          list what would ship (no network)
 //   node scripts/publish-netlify.mjs --stage <dir>    copy exactly those files into <dir>
@@ -40,11 +41,18 @@ const clean = ref => path.posix.normalize(ref.split(/[?#]/)[0]);
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const pageRefs = [...html.matchAll(/\b(?:src|href)\s*=\s*"([^"]+)"/g)].map(m => m[1]).filter(isLocal).map(clean);
 const shipped = new Set(['index.html', ...pageRefs, ...[...tracked].filter(name => name.startsWith(VENDOR))]);
+// The web app manifest names the home screen icons; they ship with it.
+for (const name of pageRefs.filter(ref => ref.endsWith('.webmanifest'))) {
+  const manifest = JSON.parse(fs.readFileSync(path.join(root, name), 'utf8'));
+  for (const icon of manifest.icons ?? []) {
+    if (isLocal(icon.src)) shipped.add(path.posix.normalize(path.posix.join(path.posix.dirname(name), clean(icon.src))));
+  }
+}
 
 for (const name of shipped) {
   assert(!name.startsWith('..') && !path.isAbsolute(name), `Refusing a path outside the game: ${name}`);
   assert(tracked.has(name), `index.html needs ${name}, but git does not track it.`);
-  assert(/^(?:index\.html|style\.css|[\w-]+\.js|vendor\/three\/[\w./-]+)$/.test(name), `Unexpected deploy file: ${name}`);
+  assert(/^(?:index\.html|style\.css|manifest\.webmanifest|[\w-]+\.js|icons\/[\w-]+\.png|vendor\/three\/[\w./-]+)$/.test(name), `Unexpected deploy file: ${name}`);
   const stat = fs.lstatSync(path.join(root, name));
   assert(stat.isFile() && !stat.isSymbolicLink(), `Only regular files may ship: ${name}`);
 }

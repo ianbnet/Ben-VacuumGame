@@ -1090,3 +1090,82 @@ body.is-fullscreen #dailyLabel {
         padding: 9px 12px;
     }
 }
+
+/* ----- Home screen prompt (phones and tablets only) ----- */
+
+#installBar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    max-width: 720px;
+    box-sizing: border-box;
+    padding: 9px 12px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--mustard);
+    border-radius: 12px;
+    color: var(--cream);
+    font-family: var(--font);
+    text-align: left;
+}
+
+#installBar[hidden],
+#btnInstall[hidden] {
+    display: none;
+}
+
+#installBar img {
+    width: 40px;
+    height: 40px;
+    border-radius: 9px;
+    flex: none;
+}
+
+.install-text {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 12px;
+    line-height: 1.35;
+    color: var(--cream-dim);
+}
+
+.install-text strong {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+    color: var(--cream);
+}
+
+.install-text svg {
+    width: 0.95em;
+    height: 1.15em;
+    vertical-align: -0.2em;
+    color: var(--mint);
+}
+
+#installBar .action-btn {
+    flex: none;
+}
+
+body.is-fullscreen #installBar {
+    display: none;
+}
+
+@media (max-width: 640px) {
+    #installBar {
+        flex-wrap: wrap;
+        gap: 8px 10px;
+    }
+
+    .install-text {
+        flex-basis: calc(100% - 52px);
+    }
+
+    #installBar .action-btn {
+        margin-left: auto;
+    }
+}

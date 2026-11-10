@@ -1,0 +1,17 @@
+{
+  "name": "Roomba Vacuum",
+  "short_name": "Vacuum",
+  "description": "Clean every tile and dock before the battery dies. In 2D or first person.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#16211F",
+  "theme_color": "#16211F",
+  "categories": ["games"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

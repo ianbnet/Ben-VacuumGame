@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Home screen icons</title>
+    <style>
+        body { background: #777; color: #fff; font: 14px sans-serif; padding: 24px; }
+        figure { display: inline-block; margin: 0 24px 24px 0; vertical-align: top; }
+        canvas { display: block; background: repeating-conic-gradient(#999 0% 25%, #bbb 0% 50%) 0 0 / 24px 24px; }
+        a { color: #fff; }
+        .mask { border-radius: 50%; }
+    </style>
+</head>
+<body>
+    <p>Each link saves one PNG. Put them in <code>icons/</code>. The round one previews how Android crops the maskable icon.</p>
+    <div id="out"></div>
+    <script src="icon-art.js"></script>
+    <script>
+        const out = document.getElementById('out');
+        function show(name, size, kind, shown, cls) {
+            const c = document.createElement('canvas');
+            c.width = c.height = size;
+            drawAppIcon(c.getContext('2d'), size, kind);
+            c.style.width = c.style.height = shown + 'px';
+            if (cls) c.className = cls;
+            const fig = document.createElement('figure');
+            fig.appendChild(c);
+            const cap = document.createElement('figcaption');
+            if (name) {
+                const a = document.createElement('a');
+                a.download = name;
+                a.href = c.toDataURL('image/png');
+                a.textContent = name;
+                cap.appendChild(a);
+            } else cap.textContent = 'maskable, cropped to a circle';
+            fig.appendChild(cap);
+            out.appendChild(fig);
+            return c;
+        }
+        window.iconCanvases = {};
+        for (const [name, size, kind] of APP_ICON_FILES) window.iconCanvases[name] = show(name, size, kind, Math.min(size, 256));
+        show('', 512, 'maskable', 256, 'mask');
+        for (const s of [60, 40, 29]) show('', 180, 'apple', s).nextSibling.textContent = s + ' px';
+    </script>
+</body>
+</html>

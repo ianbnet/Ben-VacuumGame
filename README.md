@@ -53,6 +53,7 @@ The bar at the top of the page picks what to play.
 | `rooms.js` | Rooms beyond the house, with no DOM: the piece catalogue, validation, the room code used for saving and share links, dates, the daily generator, the editor's placement rules, and the replay of a recorded run. |
 | `game.js` | Game state, level setup, movement rules, input, saved progress, room modes, recorded runs and the best-run ghost, level select, the frame loop. |
 | `modes.js` | The bar at the top (The House, Room of the Day, Build a Room, Race my best) and the room editor on the board. |
+| `install.js` | The home screen prompt for phones and tablets. |
 | `render2d.js` | The top-down view in the atomic-age themes: the furniture painters (sofa, kidney table, shell chair, snake plant, pet bed, counters, crates, neon panels), the chrome dock, the vacuum and its ghost, cleaning effects, overlays, banner and help. |
 | `render3d.js` | The first-person view: a software raycaster into an `ImageData` buffer at up to 1.5x the canvas size, with a baked lightmap (window, lamp, dock, ambient occlusion), plaster and brick materials, a real window, see-over furniture, sprites, polished-floor reflections, dust motes, bloom and grade, and the dive transition. |
 | `audio.js` | Synthesised sound effects and the motor hum (Web Audio, no files). |
@@ -73,6 +74,19 @@ Extra rooms are loaded into one slot after the six house levels (`LEVELS[SPECIAL
 ```bash
 node tests/run.js
 ```
+
+## Home screen icon
+
+On a phone or tablet the game offers to put itself on the home screen, where it opens full screen
+under its own icon. Android browsers show their install sheet from the **Add it** button; iOS has
+no such sheet, so there the bar names the two taps (Share, then Add to Home Screen). The bar shows
+once, and the **Home screen** button brings it back. It never appears on a desktop browser or in a
+game already opened from its icon.
+
+`manifest.webmanifest` and `icons/` are what the phone reads. The icon is drawn in code
+(`scripts/icon-art.js`); open `scripts/make-icons.html` through the dev server to redraw and save
+the PNGs. There is no service worker, so the icon needs a connection to load the game. On iOS a
+home screen game keeps its own saves, separate from the same site in Safari.
 
 ## Publishing
 
