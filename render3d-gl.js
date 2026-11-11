@@ -46,11 +46,14 @@ const G = {
     perf: { cpuMs: 0, dtMs: 16 },
 };
 
+// mirror: width of the floor's reflection image. env: size of the room's reflection cube.
+// lampShadow: the ceiling lamp casts shadows of its own. lights: how many of a style's own
+// lights (strips, sconces, crystals) are lit.
 const QUALITY = {
-    low: { scale: 0.7, shadow: 1024, ao: false, dof: false, reflections: false, bloom: true },
-    medium: { scale: 0.85, shadow: 2048, ao: false, dof: false, reflections: true, bloom: true },
-    high: { scale: 1, shadow: 2048, ao: true, dof: true, reflections: true, bloom: true },
-    ultra: { scale: 1.3, shadow: 4096, ao: true, dof: true, reflections: true, bloom: true },
+    low: { scale: 0.7, shadow: 1024, ao: false, dof: false, reflections: false, bloom: true, mirror: 320, env: 64, lampShadow: false, lights: 2 },
+    medium: { scale: 0.85, shadow: 2048, ao: false, dof: false, reflections: true, bloom: true, mirror: 320, env: 128, lampShadow: false, lights: 4 },
+    high: { scale: 1, shadow: 2048, ao: true, dof: true, reflections: true, bloom: true, mirror: 512, env: 256, lampShadow: true, lights: 6 },
+    ultra: { scale: 1.3, shadow: 4096, ao: true, dof: true, reflections: true, bloom: true, mirror: 768, env: 256, lampShadow: true, lights: 8 },
 };
 
 const UP = new THREE.Vector3(0, 1, 0);
@@ -191,6 +194,11 @@ function paintFloorCanvas(theme) {
     const px = 96;
     const c = makeCanvas(COLS * px, ROWS * px);
     const t = c.getContext('2d');
+    const pack = s3Pack(theme);
+    if (pack && pack.paintFloor) {
+        pack.paintFloor(t, theme, px);
+        return c;
+    }
     if (theme.floor === 'lino') {
         const a = '#EAF1EC', b = '#8ED1C0';
         for (let r = 0; r < ROWS * 2; r++) {
@@ -356,6 +364,11 @@ function paintBackdrop(theme) {
     const w = 2048, h = 768;
     const c = makeCanvas(w, h);
     const t = c.getContext('2d');
+    const pack = s3Pack(theme);
+    if (pack && pack.paintBackdrop) {
+        pack.paintBackdrop(t, theme, w, h);
+        return c;
+    }
     const out = s3Outside(theme);
     const sky = t.createLinearGradient(0, 0, 0, h * 0.72);
     sky.addColorStop(0, theme.sky.zenith);
@@ -446,8 +459,8 @@ function getTexture(key, make, opts) {
 
 // --- Materials -------------------------------------------------------------------------------
 
-function materialFor(spec, textureName, theme) {
-    const key = JSON.stringify(spec) + '|' + (textureName || '');
+function materialFor(spec, textureName, theme, texRepeat) {
+    const key = JSON.stringify(spec) + '|' + (textureName || '') + '|' + (texRepeat ? texRepeat.join('x') : '');
     if (G.materials.has(key)) return G.materials.get(key);
     const p = {
         color: new THREE.Color(spec.color || '#888888'),
@@ -459,6 +472,28 @@ function materialFor(spec, textureName, theme) {
     if (spec.emissive) { p.emissive = new THREE.Color(spec.emissive); p.emissiveIntensity = spec.emissiveIntensity || 1; }
     if (spec.transparent) { p.transparent = true; p.opacity = spec.opacity; p.depthWrite = false; }
     if (spec.side === 2) p.side = THREE.DoubleSide;
+    if (spec.flat) p.flatShading = true;
+    if (spec.iridescence) { p.iridescence = spec.iridescence; p.iridescenceIOR = 1.5; }
+    // A style pack's own texture: colour, and a normal map made from the same picture
+    const reg = s3PackTexture(textureName);
+    if (reg) {
+        const size = reg.size || 256;
+        const rep = texRepeat || reg.repeat || [1, 1];
+        const id = textureName + ':' + (reg.perTheme ? theme.name : '') + ':' + (reg.byColor ? spec.color : '') + ':' + rep.join('x');
+        const paint = () => {
+            const c = makeCanvas(size, size);
+            reg.paint(c.getContext('2d'), size, theme, spec.color);
+            return c;
+        };
+        p.map = getTexture('pack:' + id, paint, { repeat: rep, nearest: !!reg.nearest });
+        if (reg.normal) {
+            p.normalMap = getTexture('packN:' + id, () => normalFromHeight(paint(), reg.normal), { srgb: false, repeat: rep, nearest: !!reg.nearest });
+            const k = reg.normalScale || 0.7;
+            p.normalScale = new THREE.Vector2(k, k);
+        }
+        if (!reg.tint) p.color = new THREE.Color('#FFFFFF');
+        if (reg.glow) { p.emissiveMap = p.map; p.emissive = new THREE.Color('#FFFFFF'); p.emissiveIntensity = reg.glow; }
+    }
     if (textureName === 'plaster') {
         p.normalMap = getTexture('plasterN', paintPlasterNormal, { srgb: false, repeat: [3, 3] });
         p.normalScale = new THREE.Vector2(0.35, 0.35);
@@ -503,7 +538,40 @@ function geometryFor(p) {
             return g;
         }
         case 'cyl':
-            return new THREE.CylinderGeometry(p.rTop, p.rBot, p.h, p.open ? 32 : 24, 1, !!p.open, p.thetaStart || 0, p.thetaLength || Math.PI * 2);
+            return new THREE.CylinderGeometry(p.rTop, p.rBot, p.h, p.seg || (p.open ? 32 : 24), 1, !!p.open, p.thetaStart || 0, p.thetaLength || Math.PI * 2);
+        case 'lathe': {
+            // a profile of [radius, height] pairs spun round the y axis: turned legs, urns, shades
+            const pts = p.points.map(([r, y]) => new THREE.Vector2(Math.max(0.0001, r), y));
+            return new THREE.LatheGeometry(pts, p.seg || 28);
+        }
+        case 'tube': {
+            // a pipe along a path of points, relative to the part's position
+            const curve = new THREE.CatmullRomCurve3(p.path.map((q) => new THREE.Vector3(q[0], q[1], q[2])), !!p.closed, 'catmullrom', p.tension === undefined ? 0.25 : p.tension);
+            return new THREE.TubeGeometry(curve, p.steps || p.path.length * 8, p.r, p.seg || 10, !!p.closed);
+        }
+        case 'gear': {
+            // a toothed wheel lying flat, axis up, with a hole through the middle
+            const shape = new THREE.Shape();
+            const n = p.teeth || 12, r0 = p.r * 0.82;
+            for (let i = 0; i < n * 4; i++) {
+                const a = (i / (n * 4)) * Math.PI * 2;
+                const r = i % 4 < 2 ? p.r : r0;
+                if (i === 0) shape.moveTo(Math.cos(a) * r, Math.sin(a) * r); else shape.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+            }
+            shape.closePath();
+            if (p.hole) {
+                const hole = new THREE.Path();
+                hole.absarc(0, 0, p.hole, 0, Math.PI * 2, true);
+                shape.holes.push(hole);
+            }
+            const depth = p.depth || 0.06;
+            const g = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false, curveSegments: 10 });
+            g.rotateX(-Math.PI / 2);
+            g.translate(0, -depth / 2, 0);
+            return g;
+        }
+        case 'gem':
+            return p.faces === 20 ? new THREE.IcosahedronGeometry(p.r, 0) : new THREE.OctahedronGeometry(p.r, 0);
         case 'sphere':
             return new THREE.SphereGeometry(p.r, 28, 18);
         case 'torus':
@@ -528,7 +596,7 @@ function geometryFor(p) {
 
 function buildPart(p, theme) {
     const geo = geometryFor(p);
-    const mat = materialFor(p.mat, p.texture, theme);
+    const mat = materialFor(p.mat, p.texture, theme, p.texRepeat);
     const mesh = new THREE.Mesh(geo, mat);
     if (p.shape === 'rod') {
         const a = new THREE.Vector3(...p.from), b = new THREE.Vector3(...p.to);
@@ -547,11 +615,12 @@ function buildPart(p, theme) {
     }
     const emissive = !!(p.mat && p.mat.emissive);
     const glassy = !!(p.mat && p.mat.transparent);
-    mesh.castShadow = !emissive && !glassy && p.shape !== 'plane';
+    mesh.castShadow = !emissive && !glassy && p.shape !== 'plane' && !p.noShadow;
     mesh.receiveShadow = !emissive;
     if (p.tag) {
         (G.tagged[p.tag] = G.tagged[p.tag] || []).push(mesh);
-        mesh.userData.base = { y: mesh.position.y, sy: mesh.scale.y, rx: mesh.rotation.x };
+        mesh.userData.base = { y: mesh.position.y, sy: mesh.scale.y, rx: mesh.rotation.x, glow: mat.emissiveIntensity || 0 };
+        mesh.userData.speed = p.speed || 0.5;
     }
     return mesh;
 }
@@ -818,14 +887,19 @@ function updateSaucer() {
 }
 
 function buildFloor(theme) {
+    // A style can say how its floor behaves: theme.floorMat = { bump, normal, metalness,
+    // clearcoat, reflect, dust: [keep, r, g, b] }
+    const fm = theme.floorMat || {};
     const map = getTexture('floor:' + theme.name, () => paintFloorCanvas(theme));
-    const normal = getTexture('floorN:' + theme.name, () => normalFromHeight(paintFloorCanvas(theme), theme.floor === 'wood' ? 0.6 : 0.3), { srgb: false });
+    const normal = getTexture('floorN:' + theme.name, () => normalFromHeight(paintFloorCanvas(theme), fm.bump || (theme.floor === 'wood' ? 0.6 : 0.3)), { srgb: false });
     const dust = getTexture('dust', paintDustAtlas, { repeat: [COLS / 4, ROWS / 4] });
+    const nk = fm.normal === undefined ? 0.45 : fm.normal;
     const mat = new THREE.MeshPhysicalMaterial({
-        map, normalMap: normal, normalScale: new THREE.Vector2(0.45, 0.45),
-        roughness: 1, roughnessMap: G.tiles, metalness: 0,
-        clearcoat: theme.floor === 'concrete' ? 0 : 0.12, clearcoatRoughness: 0.4,
+        map, normalMap: normal, normalScale: new THREE.Vector2(nk, nk),
+        roughness: 1, roughnessMap: G.tiles, metalness: fm.metalness || 0,
+        clearcoat: fm.clearcoat !== undefined ? fm.clearcoat : theme.floor === 'concrete' ? 0 : 0.12, clearcoatRoughness: 0.4,
     });
+    const dustMix = fm.dust || [0.62, 0.30, 0.28, 0.25];
     mat.userData.reflections = QUALITY[G.quality].reflections;
     mat.onBeforeCompile = (shader) => {
         shader.uniforms.tDust = { value: dust };
@@ -836,6 +910,8 @@ function buildFloor(theme) {
         shader.uniforms.tReflect = { value: null };
         shader.uniforms.uReflectMatrix = { value: new THREE.Matrix4() };
         shader.uniforms.uReflectStrength = { value: 0 };
+        shader.uniforms.uDustKeep = { value: dustMix[0] };
+        shader.uniforms.uDustAdd = { value: new THREE.Vector3(dustMix[1], dustMix[2], dustMix[3]) };
         mat.userData.shader = shader;
         shader.vertexShader = shader.vertexShader
             .replace('#include <common>', '#include <common>\nvarying vec4 vReflectUv;\nvarying vec3 vWorldPos;\nuniform mat4 uReflectMatrix;')
@@ -844,12 +920,13 @@ function buildFloor(theme) {
             .replace('#include <common>', `#include <common>
 uniform sampler2D tDust; uniform vec2 uDustRepeat; uniform vec2 uAhead; uniform vec3 uAheadColor;
 uniform float uGlints[24]; uniform sampler2D tReflect; uniform float uReflectStrength;
+uniform float uDustKeep; uniform vec3 uDustAdd;
 varying vec4 vReflectUv; varying vec3 vWorldPos;`)
             .replace('#include <map_fragment>', `#include <map_fragment>
 vec4 tileInfo = texture2D(roughnessMap, vRoughnessMapUv);
 float dirty = 1.0 - tileInfo.r;
 vec4 dustTex = texture2D(tDust, vMapUv * uDustRepeat);
-diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.62 + vec3(0.30, 0.28, 0.25), dirty * dustTex.a * 0.9);
+diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * uDustKeep + uDustAdd, dirty * dustTex.a * 0.9);
 diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.78, 0.9, 1.12), tileInfo.b * 0.55);
 vec2 tileXZ = floor(vWorldPos.xz);
 float aheadHit = 1.0 - step(0.5, length(tileXZ - uAhead));
@@ -873,7 +950,7 @@ if (uReflectStrength > 0.0) {
     vec3 viewDir = normalize(cameraPosition - vWorldPos);
     float fres = pow(1.0 - max(0.0, viewDir.y), 3.0);
     float gloss = (1.0 - dirty) * (1.0 - tileInfo.g);
-    outgoingLight = mix(outgoingLight, refl, clamp(gloss * (0.1 + 0.5 * fres) * uReflectStrength, 0.0, 0.6));
+    outgoingLight = mix(outgoingLight, refl, clamp(gloss * (0.1 + 0.5 * fres) * uReflectStrength, 0.0, 0.72));
 }
 #include <opaque_fragment>`);
     };
@@ -954,7 +1031,10 @@ function buildScene(levelIndex) {
     G.scene = scene;
     G.theme = theme;
     scene.background = new THREE.Color(theme.sky.horizon);
-    scene.fog = new THREE.FogExp2(new THREE.Color(theme.time === 'night' ? '#141C26' : theme.sky.horizon).lerp(new THREE.Color(theme.walls), 0.5), 0.011);
+    // Haze: a style can set its own colour and thickness with theme.fog = { color, density }
+    scene.fog = theme.fog
+        ? new THREE.FogExp2(new THREE.Color(theme.fog.color), theme.fog.density)
+        : new THREE.FogExp2(new THREE.Color(theme.time === 'night' ? '#141C26' : theme.sky.horizon).lerp(new THREE.Color(theme.walls), 0.5), 0.011);
 
     if (!G.tiles) buildTileTexture();
     G.tileCache.fill(-1);
@@ -991,15 +1071,43 @@ function buildScene(levelIndex) {
     sun.shadow.normalBias = 0.03;
     sun.shadow.radius = 3;
     scene.add(sun, sun.target);
-    const hemi = new THREE.HemisphereLight(new THREE.Color(theme.sky.zenith), new THREE.Color(theme.sky.ground).lerp(new THREE.Color(theme.walls), 0.5), theme.ambient * 1.1);
+    // theme.fill names the colour of the soft light from above, for rooms whose sky is black
+    const hemi = new THREE.HemisphereLight(new THREE.Color(theme.fill || theme.sky.zenith), new THREE.Color(theme.sky.ground).lerp(new THREE.Color(theme.walls), 0.5), theme.ambient * 1.1);
     scene.add(hemi);
     const bounce = new THREE.DirectionalLight(new THREE.Color(theme.walls).lerp(new THREE.Color(theme.sun.color), 0.4), theme.sun.intensity * 0.16);
     bounce.position.set(COLS / 2 - sunDir[0] * 10, 3, ROWS / 2 - sunDir[2] * 10);
     bounce.target.position.set(COLS / 2, 1.5, ROWS / 2);
     scene.add(bounce, bounce.target);
-    const lamp = new THREE.PointLight(new THREE.Color(theme.lamp.color), theme.lamp.on ? theme.lamp.intensity : 0, 16, 2);
+    const q = QUALITY[G.quality];
+    const lampOn = theme.lamp.on ? theme.lamp.intensity : 0;
+    // With lamp shadows on, part of the lamp's light comes from a wide spot that casts them
+    // theme.lamp.down: the lamp only shines downwards (a recessed or shaded fitting), so the
+    // ceiling above it stays dark. Such a lamp is a spot at every quality.
+    const down = !!theme.lamp.down && lampOn > 0;
+    const lampShadow = q.lampShadow && lampOn > 0;
+    const lamp = new THREE.PointLight(new THREE.Color(theme.lamp.color), down ? 0 : lampShadow ? lampOn * 0.5 : lampOn, 16, 2);
     lamp.position.set(S3_LAMP.x, S3_WALL_H - 1.0, S3_LAMP.z);
     scene.add(lamp);
+    let lampSpot = null;
+    if (lampShadow || down) {
+        lampSpot = new THREE.SpotLight(new THREE.Color(theme.lamp.color), lampOn * (down ? 2.4 : 1.6), 18, 1.25, 0.7, 2);
+        lampSpot.position.set(S3_LAMP.x, S3_WALL_H - 0.6, S3_LAMP.z);
+        lampSpot.target.position.set(S3_LAMP.x, 0, S3_LAMP.z);
+        lampSpot.castShadow = lampShadow;
+        lampSpot.shadow.mapSize.set(1024, 1024);
+        lampSpot.shadow.bias = -0.0006;
+        lampSpot.shadow.normalBias = 0.04;
+        lampSpot.shadow.radius = 5;
+        lampSpot.shadow.camera.near = 0.4;
+        lampSpot.shadow.camera.far = 18;
+        scene.add(lampSpot, lampSpot.target);
+    }
+    // A style's own lights: strips, sconces, crystals. theme.lights = [{ pos, color, intensity, distance }]
+    for (const L of (theme.lights || []).slice(0, q.lights)) {
+        const pl = new THREE.PointLight(new THREE.Color(L.color), L.intensity, L.distance || 9, 2);
+        pl.position.set(L.pos[0], L.pos[1], L.pos[2]);
+        scene.add(pl);
+    }
     const dockLight = new THREE.PointLight(new THREE.Color('#4FA8FF'), 0.3, 4.5, 2);
     dockLight.position.set(dock.pos[0], 0.5, dock.pos[2]);
     scene.add(dockLight);
@@ -1012,7 +1120,7 @@ function buildScene(levelIndex) {
     flash.shadow.camera.near = 0.1;
     flash.shadow.camera.far = 16;
     scene.add(flash, flash.target);
-    G.lights = { sun, hemi, lamp, dockLight, vac, flash, baseSun: theme.sun.intensity, baseLamp: theme.lamp.on ? theme.lamp.intensity : 0 };
+    G.lights = { sun, hemi, lamp, lampSpot, dockLight, vac, flash, baseSun: theme.sun.intensity, baseLamp: lamp.intensity, baseLampSpot: lampSpot ? lampSpot.intensity : 0 };
 
     // The camera with the vacuum's body hanging off it, and a model of the vacuum for the ghost view
     const camera = G.camera;
@@ -1039,7 +1147,9 @@ function buildScene(levelIndex) {
     scene.add(G.bestModel);
 
     // Mirror camera for the floor's reflection
-    G.mirrorTarget = G.mirrorTarget || new THREE.WebGLRenderTarget(320, 240, { type: THREE.HalfFloatType });
+    const mw = q.mirror || 320, mh = Math.round(mw * 0.75);
+    if (G.mirrorTarget && G.mirrorTarget.width !== mw) { G.mirrorTarget.dispose(); G.mirrorTarget = null; }
+    G.mirrorTarget = G.mirrorTarget || new THREE.WebGLRenderTarget(mw, mh, { type: THREE.HalfFloatType });
     G.mirrorCamera = G.mirrorCamera || new THREE.PerspectiveCamera();
 
     // Crumbs on the dirty tiles and the saucer are solid; the beam, motes and intake dust are
@@ -1063,7 +1173,7 @@ function buildScene(levelIndex) {
 
 function bakeEnvironment() {
     const scene = G.scene;
-    const cubeRT = new THREE.WebGLCubeRenderTarget(128, { type: THREE.HalfFloatType });
+    const cubeRT = new THREE.WebGLCubeRenderTarget(QUALITY[G.quality].env || 128, { type: THREE.HalfFloatType });
     const cubeCam = new THREE.CubeCamera(0.1, 60, cubeRT);
     cubeCam.position.set(COLS / 2, 1.3, ROWS / 2);
     const bodyVisible = G.body.visible;
@@ -1077,7 +1187,7 @@ function bakeEnvironment() {
     G.env = G.pmrem.fromCubemap(cubeRT.texture).texture;
     cubeRT.dispose();
     scene.environment = G.env;
-    scene.environmentIntensity = 0.32;
+    scene.environmentIntensity = G.theme && G.theme.env !== undefined ? G.theme.env : 0.32;
 }
 
 function buildMotes(theme) {
@@ -1277,7 +1387,7 @@ function renderMirror() {
     if (floor) floor.visible = true;
     G.body.visible = wasBody;
     shader.uniforms.tReflect.value = G.mirrorTarget.texture;
-    shader.uniforms.uReflectStrength.value = 1;
+    shader.uniforms.uReflectStrength.value = (G.theme && G.theme.floorMat && G.theme.floorMat.reflect) || 1;
 }
 
 function hexRgb(rgb) {
@@ -1381,6 +1491,11 @@ function render(view, dtMs, fly) {
     if (T.cat) for (const m of T.cat) m.scale.y = m.userData.base.sy * (1 + 0.045 * Math.sin(G.time * 1.9));
     if (T.catHead) for (const m of T.catHead) m.position.y = m.userData.base.y + 0.012 * Math.sin(G.time * 1.9);
     if (T.slat) T.slat.forEach((m, i) => { m.rotation.x = m.userData.base.rx + 0.02 * Math.sin(G.time * 0.7 + i * 0.3); });
+    // For the style packs: things that turn, breathe light, or hover
+    if (T.spin) for (const m of T.spin) m.rotateY(dt * m.userData.speed);
+    if (T.pulse) T.pulse.forEach((m, i) => { m.material.emissiveIntensity = m.userData.base.glow * (0.72 + 0.28 * Math.sin(G.time * 1.7 + i * 0.9)); });
+    if (T.float) T.float.forEach((m, i) => { m.position.y = m.userData.base.y + 0.07 * Math.sin(G.time * 1.1 + i * 1.3); });
+    if (T.flicker) T.flicker.forEach((m, i) => { m.material.emissiveIntensity = m.userData.base.glow * (0.82 + 0.18 * Math.sin(G.time * 11 + i * 2.1) * Math.sin(G.time * 7.3 + i)); });
     if (T.clockMinute || T.clockHour) {
         const now = new Date();
         const minutes = now.getMinutes() + now.getSeconds() / 60;
@@ -1412,7 +1527,7 @@ function render(view, dtMs, fly) {
     // Exposure: facing the window brightens the frame, then the eye settles
     const toWindow = Math.cos(view.angle + Math.PI / 2); // 1 when facing north
     const windowWeight = Math.max(0, toWindow) * Math.max(0, 1 - Math.abs(view.camX - (S3_WINDOW.x0 + S3_WINDOW.x1) / 2) / 9) * Math.max(0, 1 - view.camY / 12);
-    const targetExposure = (theme.time === 'night' ? 1.12 : 1.14) - windowWeight * 0.3 - (flashOn ? 0.18 : 0) - fly * 0.42;
+    const targetExposure = (theme.exposure || (theme.time === 'night' ? 1.12 : 1.14)) - windowWeight * 0.3 - (flashOn ? 0.18 : 0) - fly * 0.42;
     G.exposure += (targetExposure - G.exposure) * Math.min(1, dt * (fly > 0 ? 6 : 2.2));
     G.renderer.toneMappingExposure = G.exposure;
 
@@ -1423,7 +1538,14 @@ function render(view, dtMs, fly) {
     if (G.passes.grade) {
         G.passes.grade.uniforms.uTime.value = G.time;
         G.passes.grade.uniforms.uBlur.value = G.turnBlur;
-        G.passes.grade.uniforms.uWarm.value.set(theme.time === 'night' ? 0.94 : 1.03, 1.0, theme.time === 'night' ? 1.08 : 0.96);
+        // A style can grade its own picture: theme.grade = [r, g, b], theme.vignette, theme.bloom = [strength, radius, threshold]
+        if (theme.grade) G.passes.grade.uniforms.uWarm.value.set(theme.grade[0], theme.grade[1], theme.grade[2]);
+        else G.passes.grade.uniforms.uWarm.value.set(theme.time === 'night' ? 0.94 : 1.03, 1.0, theme.time === 'night' ? 1.08 : 0.96);
+        G.passes.grade.uniforms.uVignette.value = theme.vignette === undefined ? 0.32 : theme.vignette;
+    }
+    if (G.passes.bloom) {
+        const b = theme.bloom || [0.28, 0.6, 0.95];
+        G.passes.bloom.strength = b[0]; G.passes.bloom.radius = b[1]; G.passes.bloom.threshold = b[2];
     }
 
     const t0 = performance.now();

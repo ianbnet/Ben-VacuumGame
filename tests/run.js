@@ -59,7 +59,7 @@ const sandbox = {
 };
 sandbox.window = sandbox;
 vm.createContext(sandbox);
-for (const f of ['core.js', 'levels.js', 'rooms.js', 'upgrades.js', 'design.js', 'scene3d.js', 'render2d.js', 'scene2d.js', 'render3d.js', 'game.js', 'modes.js', 'install.js']) {
+for (const f of ['core.js', 'levels.js', 'rooms.js', 'upgrades.js', 'design.js', 'scene3d.js', ...['style-scifi.js', 'style-steam.js', 'style-voxel.js', 'style-wonder.js'].filter((f) => fs.existsSync(path.join(root, f))), 'render2d.js', 'scene2d.js', 'render3d.js', 'game.js', 'modes.js', 'install.js']) {
     vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), sandbox, { filename: f });
 }
 const G = (expr) => vm.runInContext(expr, sandbox);

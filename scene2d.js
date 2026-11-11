@@ -87,6 +87,12 @@ function s2Shadow(sun, lamp, cx, cy, height) {
 function s2Palette(theme) {
     const night = theme.time === 'night';
     const lino = theme.floor === 'lino', concrete = theme.floor === 'concrete';
+    // A style pack states its own floor colours, so clean and dirty tiles stay easy to tell apart
+    const pack = s3Pack(theme);
+    return Object.assign(s2BasePalette(theme, night, lino, concrete), pack && pack.palette2d ? pack.palette2d(theme) : null);
+}
+
+function s2BasePalette(theme, night, lino, concrete) {
     return {
         glaze: lino ? [255, 240, 200] : night ? [127, 224, 216] : [108, 224, 172],
         glazeAlpha: lino ? 0.55 : concrete ? 0.56 : 0.52,
@@ -345,6 +351,12 @@ function paintConcreteFloor(c, seed) {
 }
 
 function paintFloor2D(c, theme) {
+    const pack = s3Pack(theme);
+    if (pack && pack.paintFloor) {
+        // the same painter the 3D floor uses, at the board's scale; it sets its own mood
+        pack.paintFloor(c, theme, TILE);
+        return;
+    }
     if (theme.floor === 'lino') paintLinoFloor(c, theme.floorSeed);
     else if (theme.floor === 'concrete') paintConcreteFloor(c, theme.floorSeed);
     else {
@@ -820,6 +832,25 @@ function drawLighting() {
 function drawLampFixture() {
     const th = scene.theme;
     const lx = S3_LAMP.x * TILE, ly = S3_LAMP.z * TILE;
+    // A style pack hangs its own lamp: its painter if it has one, else a plain ring of light
+    const pack = s3Pack(th);
+    if (pack) {
+        ctx.save();
+        ctx.translate(lx, ly);
+        if (pack.paint2d && pack.paint2d.lamp) pack.paint2d.lamp(ctx, th);
+        else {
+            ctx.globalAlpha = 0.5;
+            ctx.strokeStyle = th.lamp.color;
+            ctx.shadowColor = th.lamp.color;
+            ctx.shadowBlur = 10;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(0, 0, 0.72 * TILE, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+        ctx.restore();
+        return;
+    }
     ctx.save();
     ctx.globalAlpha = 0.55;
     ctx.translate(lx, ly);

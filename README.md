@@ -1,4 +1,4 @@
-# Roomba Vacuum
+# Ben's Vacuum Game
 
 A browser game: steer a robot vacuum around a 15×12 room, clean every tile, and get back to the dock before the battery dies. Thirty rooms on the five floors of the house, a new room every day, rooms you build yourself, a par score to beat on each, the ghost of your own best run to race, and a first-person 3D view you can switch to at any time.
 

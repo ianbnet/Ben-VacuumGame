@@ -35,6 +35,23 @@ function s3Mat(kind, color) {
         case 'concrete': return { color: color || '#BDBDB8', roughness: 0.95, metalness: 0 };
         case 'formica': return { color: color || '#9FD8CF', roughness: 0.3, metalness: 0, clearcoat: 0.6, clearcoatRoughness: 0.2 };
         case 'rubber': return { color: color || '#1A1A1A', roughness: 0.9, metalness: 0 };
+        // Used by the style packs
+        case 'leather': return { color: color || '#5A2E1E', roughness: 0.48, metalness: 0, clearcoat: 0.35, clearcoatRoughness: 0.45 };
+        case 'velvet': return { color: color || '#6B1E2E', roughness: 1, metalness: 0, sheen: 1, sheenRoughness: 0.35, sheenColor: '#FFD6C8' };
+        case 'copper': return { color: color || '#B8693A', roughness: 0.3, metalness: 1 };
+        case 'gold': return { color: color || '#E2B64E', roughness: 0.22, metalness: 1 };
+        case 'iron': return { color: color || '#3A3A3C', roughness: 0.62, metalness: 0.9 };
+        case 'gunmetal': return { color: color || '#23272C', roughness: 0.38, metalness: 0.9, clearcoat: 0.3, clearcoatRoughness: 0.4 };
+        case 'carbon': return { color: color || '#14171A', roughness: 0.55, metalness: 0.3, clearcoat: 0.6, clearcoatRoughness: 0.25 };
+        case 'polymer': return { color: color || '#2C3138', roughness: 0.5, metalness: 0.1, clearcoat: 0.2, clearcoatRoughness: 0.5 };
+        case 'stone': return { color: color || '#7C7F82', roughness: 0.92, metalness: 0 };
+        case 'marble': return { color: color || '#EDE8DF', roughness: 0.18, metalness: 0, clearcoat: 0.7, clearcoatRoughness: 0.12 };
+        case 'moss': return { color: color || '#4E7A3A', roughness: 1, metalness: 0, sheen: 0.5, sheenColor: '#C8FF9A' };
+        case 'glow': return { color: color || '#FFFFFF', emissive: color || '#FFFFFF', emissiveIntensity: 5, roughness: 0.3, metalness: 0 };
+        case 'crystal': return { color: color || '#7FE8FF', emissive: color || '#7FE8FF', emissiveIntensity: 1.6, roughness: 0.08, metalness: 0, transparent: true, opacity: 0.82, flat: true, iridescence: 1 };
+        case 'holo': return { color: color || '#5CE1FF', emissive: color || '#5CE1FF', emissiveIntensity: 2.2, roughness: 0.2, metalness: 0, transparent: true, opacity: 0.35, side: 2 };
+        case 'pearl': return { color: color || '#F4F0FF', roughness: 0.2, metalness: 0.1, clearcoat: 1, clearcoatRoughness: 0.1, iridescence: 1 };
+        case 'blocky': return { color: color || '#8A8A8A', roughness: 0.95, metalness: 0, flat: true };
         default: return { color: color || '#888888', roughness: 0.7, metalness: 0 };
     }
 }
@@ -109,11 +126,56 @@ const S3_THEMES = [
     },
 ];
 
-// The theme for a level: its own choice when it has one (extra rooms do), else by position
+// --- Style packs -------------------------------------------------------------------------------
+// A floor of the house can wear a whole different look. A style pack is one file
+// (style-*.js) that registers itself here with six themes of its own and, for whatever it
+// wants to change, its own furniture builders, room shell, floor painter, backdrop and 2D
+// painters. Anything a pack leaves out falls back to the atomic-age builders in this file.
+// The themes above carry no `style`, which is how the original look stays exactly as it was.
+const S3_STYLE_PACKS = {};
+const S3_FLOOR_STYLE = ['atomic', 'scifi', 'steam', 'voxel', 'wonder'];
+
+function s3Pack(th) {
+    return (th && th.style && S3_STYLE_PACKS[th.style]) || null;
+}
+
+// Shorthand for the packs: a box, a cylinder, a sphere and a ring as scene parts
+function s3B(pos, size, mat, extra) { return Object.assign({ shape: 'box', pos, size, mat }, extra); }
+function s3C(pos, rTop, rBot, h, mat, extra) { return Object.assign({ shape: 'cyl', pos, rTop, rBot, h, mat }, extra); }
+function s3S(pos, r, mat, extra) { return Object.assign({ shape: 'sphere', pos, r, mat }, extra); }
+function s3R(pos, r, tube, mat, extra) { return Object.assign({ shape: 'torus', pos, r, tube, rot: [Math.PI / 2, 0, 0], mat }, extra); }
+
+// The sleeping cat every pet bed holds, whatever the style: parts tagged so it breathes
+function s3Cat(th, y) {
+    const fur = s3Mat('fur', th.cat);
+    const b = y || 0;
+    return [
+        { shape: 'sphere', pos: [-0.05, b + 0.42, 0], r: 0.25, scale: [1.5, 0.82, 1.05], mat: fur, tag: 'cat' },
+        { shape: 'sphere', pos: [0.38, b + 0.5, 0.06], r: 0.15, scale: [1, 0.9, 0.95], mat: fur, tag: 'catHead' },
+        { shape: 'cyl', pos: [0.42, b + 0.64, -0.01], rTop: 0, rBot: 0.045, h: 0.1, rot: [0, 0, -0.2], mat: fur },
+        { shape: 'cyl', pos: [0.42, b + 0.64, 0.13], rTop: 0, rBot: 0.045, h: 0.1, rot: [0, 0, -0.2], mat: fur },
+        { shape: 'torus', pos: [-0.42, b + 0.3, 0.1], r: 0.2, tube: 0.032, arc: Math.PI, rot: [Math.PI / 2, 0, Math.PI * 0.75], mat: fur },
+    ];
+}
+
+// A pack's texture by its 'pack:name' handle, or null
+function s3PackTexture(handle) {
+    const cut = String(handle || '').indexOf(':');
+    if (cut < 0) return null;
+    const pack = S3_STYLE_PACKS[handle.slice(0, cut)];
+    return (pack && pack.textures && pack.textures[handle.slice(cut + 1)]) || null;
+}
+
+// The theme for a level. Extra rooms (the room of the day, built rooms) name one of the six
+// atomic themes. A house room takes the pack of its floor and the theme of its place on it.
 function s3Theme(levelIndex) {
     const lv = typeof LEVELS !== 'undefined' ? LEVELS[levelIndex] : null;
-    const n = lv && Number.isInteger(lv.theme) ? lv.theme : levelIndex;
-    return S3_THEMES[((n % S3_THEMES.length) + S3_THEMES.length) % S3_THEMES.length];
+    const wrap = (n, len) => ((n % len) + len) % len;
+    if (lv && Number.isInteger(lv.theme)) return S3_THEMES[wrap(lv.theme, S3_THEMES.length)];
+    const size = typeof FLOOR_SIZE === 'number' ? FLOOR_SIZE : S3_THEMES.length;
+    const pack = S3_STYLE_PACKS[S3_FLOOR_STYLE[Math.floor(Math.max(0, levelIndex) / size)]];
+    const list = pack && pack.themes && pack.themes.length ? pack.themes : S3_THEMES;
+    return list[wrap(levelIndex, list.length)];
 }
 
 // Direction from a footprint to its nearest wall: where a couch or chair puts its back.
@@ -333,13 +395,18 @@ function s3Furniture(levelIndex) {
         const swap = facing === 'east' || facing === 'west';
         const lw = swap ? obs.h : obs.w, ld = swap ? obs.w : obs.h;
         let parts;
+        const pack = s3Pack(th) || {};
         switch (obs.type) {
-            case 'couch': parts = s3Couch(lw, ld, th); break;
-            case 'table': parts = s3Table(lw, ld, th); break;
-            case 'chair': parts = s3Chair(lw, ld, th); break;
-            case 'plant': parts = s3Plant(lw, ld, th, levelIndex * 17 + i); break;
-            case 'petbed': parts = s3PetBed(lw, ld, th); break;
-            case 'wall': parts = s3WallParts({ w: lw, h: ld, col: obs.col, row: obs.row }, th); break;
+            case 'couch': parts = pack.couch ? pack.couch(lw, ld, th) : s3Couch(lw, ld, th); break;
+            case 'table': parts = pack.table ? pack.table(lw, ld, th) : s3Table(lw, ld, th); break;
+            case 'chair': parts = pack.chair ? pack.chair(lw, ld, th) : s3Chair(lw, ld, th); break;
+            case 'plant': parts = pack.plant ? pack.plant(lw, ld, th, levelIndex * 17 + i) : s3Plant(lw, ld, th, levelIndex * 17 + i); break;
+            case 'petbed': parts = pack.petbed ? pack.petbed(lw, ld, th) : s3PetBed(lw, ld, th); break;
+            case 'wall': {
+                const w = { w: lw, h: ld, col: obs.col, row: obs.row };
+                parts = pack.wall ? pack.wall(w, th) : s3WallParts(w, th);
+                break;
+            }
             default: parts = [{ shape: 'box', pos: [0, 0.5, 0], size: [lw - 0.1, 1, ld - 0.1], mat: s3Mat('plaster') }];
         }
         out.push({ type: obs.type, pos: [obs.col + obs.w / 2, 0, obs.row + obs.h / 2], yaw, parts, footprint: obs });
@@ -353,6 +420,8 @@ function s3Dock(levelIndex) {
     const th = s3Theme(levelIndex);
     const c = level.charger;
     const facing = s3Facing({ col: c.col, row: c.row, w: 1, h: 1 });
+    const pack = s3Pack(th);
+    if (pack && pack.dock) return { pos: [c.col + 0.5, 0, c.row + 0.5], yaw: S3_YAW[facing], parts: pack.dock(th), color: th.accent.color };
     const parts = [];
     parts.push({ shape: 'cyl', pos: [0, 0.02, 0], rTop: 0.44, rBot: 0.46, h: 0.04, mat: s3Mat('chrome') });
     parts.push({ shape: 'torus', pos: [0, 0.045, 0], r: 0.36, tube: 0.012, rot: [Math.PI / 2, 0, 0], mat: s3Mat('emissive', '#4FA8FF'), tag: 'dockRing' });
@@ -381,8 +450,44 @@ function s3WallLength(wall) {
     return wall === 'north' || wall === 'south' ? COLS : ROWS;
 }
 
+// The four walls with the window opening in the north one, and the ceiling: where every
+// style's room starts. `o.mat(wall)` picks a wall's material, `o.wallTex` and `o.ceilTex`
+// name textures, `o.rep` is how often the wall texture repeats along and up a wall.
+function s3Shell(th, o) {
+    o = o || {};
+    const P = [];
+    const H = S3_WALL_H, T = S3_WALL_T, W = S3_WINDOW;
+    const mat = (wall) => (o.mat ? o.mat(wall) : s3Mat('plaster', th.accent.wall === wall ? th.accent.color : th.walls));
+    const tex = o.wallTex || 'plaster';
+    const rep = o.rep || null;
+    const wallBox = (pos, size, wall, len, hgt) => {
+        const part = { shape: 'box', pos, size, mat: mat(wall), texture: tex };
+        if (rep) part.texRepeat = [Math.max(1, Math.round(len * rep[0])), Math.max(1, Math.round((hgt / H) * rep[1]))];
+        P.push(part);
+    };
+    wallBox([W.x0 / 2, H / 2, -T / 2], [W.x0, H, T], 'north', W.x0, H);
+    wallBox([(W.x1 + COLS) / 2, H / 2, -T / 2], [COLS - W.x1, H, T], 'north', COLS - W.x1, H);
+    wallBox([(W.x0 + W.x1) / 2, W.sill / 2, -T / 2], [W.x1 - W.x0, W.sill, T], 'north', W.x1 - W.x0, W.sill);
+    wallBox([(W.x0 + W.x1) / 2, (W.top + H) / 2, -T / 2], [W.x1 - W.x0, H - W.top, T], 'north', W.x1 - W.x0, H - W.top);
+    wallBox([COLS / 2, H / 2, ROWS + T / 2], [COLS, H, T], 'south', COLS, H);
+    wallBox([-T / 2, H / 2, ROWS / 2], [T, H, ROWS + 2 * T], 'west', ROWS, H);
+    wallBox([COLS + T / 2, H / 2, ROWS / 2], [T, H, ROWS + 2 * T], 'east', ROWS, H);
+    P.push({ shape: 'box', pos: [COLS / 2, H + 0.05, ROWS / 2], size: [COLS + 2 * T, 0.1, ROWS + 2 * T], mat: o.ceilMat || s3Mat('plaster', th.ceiling), texture: o.ceilTex || 'ceiling' });
+    return P;
+}
+
+// The pane in the window opening. Every style keeps one, tagged so the renderer can find it.
+function s3WindowGlass(color, opacity) {
+    const W = S3_WINDOW;
+    const glass = s3Mat('glass', color);
+    if (opacity !== undefined) glass.opacity = opacity;
+    return { shape: 'plane', pos: [(W.x0 + W.x1) / 2, (W.sill + W.top) / 2, -0.2], size: [W.x1 - W.x0, W.top - W.sill], mat: glass, tag: 'glass' };
+}
+
 function s3Architecture(levelIndex) {
     const th = s3Theme(levelIndex);
+    const pack = s3Pack(th);
+    if (pack && pack.architecture) return pack.architecture(levelIndex, th);
     const P = [];
     const H = S3_WALL_H, T = S3_WALL_T;
     const plaster = (wall) => s3Mat('plaster', th.accent.wall === wall ? th.accent.color : th.walls);
@@ -522,6 +627,8 @@ function s3SunDirection(theme) {
 
 // What is outside the window, as a few named elements for the backdrop painter
 function s3Outside(theme) {
+    const pack = s3Pack(theme);
+    if (pack) return { kind: theme.outside, rocket: false, gantry: false, hills: false, moon: false, saucer: false };
     switch (theme.outside) {
         case 'launchpad': return { kind: 'launchpad', rocket: true, gantry: true, hills: false, moon: theme.time === 'night' };
         case 'night': return { kind: 'night', rocket: false, gantry: false, hills: true, moon: true, saucer: true };

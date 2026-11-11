@@ -1,6 +1,6 @@
 {
-  "name": "Roomba Vacuum",
-  "short_name": "Vacuum",
+  "name": "Ben's Vacuum Game",
+  "short_name": "Ben's Vacuum",
   "description": "Clean every tile and dock before the battery dies. In 2D or first person.",
   "start_url": "./",
   "scope": "./",

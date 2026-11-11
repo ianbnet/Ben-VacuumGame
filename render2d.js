@@ -96,7 +96,7 @@ function paintFurniture(c, theme) {
 
     // Shadows first: the walls as one shape, so their shadows merge without seams
     if (walls.length) {
-        const h = S2_WALL_HEIGHTS[theme.wallStyle] || 4.8;
+        const h = theme.wallHeight || S2_WALL_HEIGHTS[theme.wallStyle] || 4.8;
         const mid = walls.reduce((a, it) => [a[0] + it.cx / walls.length, a[1] + it.cy / walls.length], [0, 0]);
         const s = s2Shadow(sun, theme.lamp, mid[0] / TILE, mid[1] / TILE, h);
         castShadow(c, () => {
@@ -119,12 +119,25 @@ function paintFurniture(c, theme) {
         }, s.dx * TILE, s.dy * TILE, s.blur, s.alpha);
     }
 
-    // Then the pieces themselves
-    for (const it of walls) paintWallTile(c, it, theme, wallSet);
+    // Then the pieces themselves. A style pack can paint any of them its own way:
+    // pack.paint2d = { wall(c, it, th, wallSet), couch(c, lw, ld, th), table(c, lw, ld, th),
+    // chair(c, th), plant(c, th, seed), petbed(c, lw, ld, th) }, drawn in the piece's own
+    // frame (centred, back towards -y, TILE pixels to a tile) except walls, which are in board space.
+    const own = (s3Pack(theme) || {}).paint2d || {};
+    for (const it of walls) {
+        if (own.wall) own.wall(c, it, theme, wallSet); else paintWallTile(c, it, theme, wallSet);
+    }
     for (const it of pieces) {
         c.save();
         c.translate(it.cx, it.cy);
         c.rotate(-it.yaw);
+        if (own[it.o.type]) {
+            if (it.o.type === 'chair') own.chair(c, theme);
+            else if (it.o.type === 'plant') own.plant(c, theme, currentLevel * 17 + it.i);
+            else own[it.o.type](c, it.lw, it.ld, theme);
+            c.restore();
+            continue;
+        }
         switch (it.o.type) {
             case 'couch': paintCouch(c, it.lw, it.ld, theme); break;
             case 'table': paintTable(c, it.lw, it.ld, theme); break;
