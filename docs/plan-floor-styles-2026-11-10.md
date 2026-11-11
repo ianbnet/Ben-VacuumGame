@@ -33,18 +33,23 @@ Decisions taken without asking (change any of them):
 
 ## Status
 
-Asked for later the same day: floor 4 as a blocky voxel dungeon, floor 5 as a glowing dragon
-wonderworld (both as original designs, with no franchise names or characters), and the game
-renamed to Ben's Vacuum Game.
+All five stages are done and committed locally (not pushed, not published when written).
 
-- [x] 1 plumbing and engine (commit f967c78)
-- [x] 2 sci-fi floor, 3D and 2D, checked in the browser (`style-scifi.js`)
+- [x] plumbing and engine lift (f967c78)
+- [x] sci-fi floor, `style-scifi.js`
 - [x] rename to Ben's Vacuum Game
-- [ ] 3 steampunk floor (`style-steam.js`), being written to `docs/style-pack-brief.md`
-- [ ] 4 voxel dungeon floor (`style-voxel.js`), same
-- [ ] 5 dragon wonderworld floor (`style-wonder.js`), same
-- [ ] add the three script tags to index.html after `style-scifi.js`, then look at every new
-      floor in the browser in 2D and 3D and tune light the way sci-fi was tuned (glow about half
-      of what looks right on paper, `fill` plus ambient near 0.85 in dark rooms, `lamp.down`)
-- [ ] tests: add "all five floor styles are registered" once the three files exist
-- [ ] README and change log sections for the floor styles; speed check at the Low preset
+- [x] dragon wonderworld floor, `style-wonder.js` (3abf6b4); glow halved after seeing it on screen
+- [x] voxel dungeon floor, `style-voxel.js` (d66153d); two dark rooms brightened
+- [x] steampunk floor, `style-steam.js`
+- [x] tests hold every pack to `docs/style-pack-brief.md`; README and change log updated
+
+Seen in the browser: every floor in 2D and at least one room of each in 3D. Not seen: every one
+of the 24 new-style rooms in 3D, and nothing on a real phone.
+
+Known and left for later:
+- The new floors draw about one and a half times as many parts per room as the atomic floor
+  (about 310 to 490 on average against 283), each its own draw call, plus up to 7 extra lights.
+  Merging static geometry by material would cut that sharply if phones struggle.
+- The 2D board still paints the atomic window (two mullions and a transom) on every floor.
+- Parts that pulse or flicker share materials, so parts with the same material pulse together.
+- The Classic software renderer ignores themes and looks the same on every floor.
