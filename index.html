@@ -118,6 +118,7 @@
                 <button id="btnDesign" class="action-btn action-btn-quiet" aria-expanded="false" aria-controls="designPanel">Design</button>
                 <button id="btnUpgrades" class="action-btn action-btn-quiet" aria-expanded="false" aria-controls="upgradePanel">Upgrades</button>
                 <button id="btnGhost" class="action-btn action-btn-quiet">Ghost</button>
+                <button id="btnCredits" class="action-btn action-btn-quiet" aria-expanded="false" aria-controls="creditsPanel">Credits</button>
                 <button id="btnInstall" class="action-btn action-btn-quiet" hidden>Home screen</button>
             </div>
         </div>
@@ -157,6 +158,21 @@
                     <canvas id="wheelFlash" class="color-wheel" width="110" height="110" tabindex="0" role="slider" aria-label="Flashlight colour"></canvas>
                     <span class="swatch-row"><span id="swatchFlash" class="swatch"></span><span id="hexFlash">#FFE2A8</span></span>
                 </div>
+            </div>
+        </div>
+        <div id="creditsPanel" class="design-panel" hidden>
+            <div class="design-head">
+                <span class="stat-label">Credits</span>
+                <div>
+                    <button id="btnCreditsClose" class="action-btn action-btn-quiet">Close</button>
+                </div>
+            </div>
+            <div class="credits">
+                <p class="credits-game">Ben's Vacuum Game</p>
+                <dl class="credits-list">
+                    <div class="credits-row"><dt>Created by</dt><dd>Benjamin, Ian and Claude</dd></div>
+                    <div class="credits-row"><dt>Tested by</dt><dd>Georgie, Liam, Vera, Pam, Dwight, Kristina</dd></div>
+                </dl>
             </div>
         </div>
         <div id="legend">Arrows / WASD move (hold to keep going) &middot; V 3D view &middot; Enter full screen &middot; G par ghost &middot; B race my best &middot; F flashlight &middot; U upgrades &middot; R restart &middot; Space next level &middot; M sound &middot; H help</div>

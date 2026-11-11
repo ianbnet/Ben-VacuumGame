@@ -4,6 +4,13 @@ A browser game: steer a robot vacuum around a 15×12 room, clean every tile, and
 
 No build step, no dependencies. Plain HTML, CSS and canvas.
 
+## Credits
+
+Created by Benjamin, Ian and Claude.
+Tested by Georgie, Liam, Vera, Pam, Dwight, Kristina.
+
+The same credits are in the game, behind the **Credits** button.
+
 ## Run it
 
 ```bash

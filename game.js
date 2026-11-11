@@ -654,6 +654,20 @@ function toggleHelp() {
     stopHold();
 }
 
+// The credits: a panel under the controls, opened by its button
+let creditsPanelOpen = false;
+function toggleCreditsPanel(open) {
+    creditsPanelOpen = open === undefined ? !creditsPanelOpen : !!open;
+    if (typeof document === 'undefined') return;
+    const panel = document.getElementById('creditsPanel');
+    if (panel) {
+        panel.hidden = !creditsPanelOpen;
+        if (creditsPanelOpen && typeof panel.scrollIntoView === 'function') panel.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+    const btn = document.getElementById('btnCredits');
+    if (btn) btn.setAttribute('aria-expanded', creditsPanelOpen ? 'true' : 'false');
+}
+
 // Keyboard
 const keyMap = {
     ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right',
@@ -1207,6 +1221,10 @@ document.addEventListener('DOMContentLoaded', () => {
             elBtnGhost.blur();
         });
     }
+    const elBtnCredits = document.getElementById('btnCredits');
+    if (elBtnCredits) elBtnCredits.addEventListener('click', () => { toggleCreditsPanel(); elBtnCredits.blur(); });
+    const elBtnCreditsClose = document.getElementById('btnCreditsClose');
+    if (elBtnCreditsClose) elBtnCreditsClose.addEventListener('click', () => toggleCreditsPanel(false));
     const elBtnMute = document.getElementById('btnMute');
     if (elBtnMute && typeof audioToggleMute === 'function') {
         audioLoadMute();

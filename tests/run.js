@@ -690,6 +690,12 @@ section('Floor styles');
 
     const shell = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
     const man = JSON.parse(fs.readFileSync(path.join(root, 'manifest.json'), 'utf8'));
+    const creditText = (shell.match(/<div id="creditsPanel"[\s\S]*?<\/dl>/) || [''])[0].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+    check(/Created by Benjamin, Ian and Claude/.test(creditText) && /Tested by Georgie, Liam, Vera, Pam, Dwight, Kristina/.test(creditText) && /id="btnCredits"/.test(shell), 'the credits name who made the game and who tested it, behind a Credits button');
+    G('toggleCreditsPanel(true)');
+    const creditsOpened = G('creditsPanelOpen');
+    G('toggleCreditsPanel()');
+    check(creditsOpened === true && G('creditsPanelOpen') === false, 'the Credits button opens the panel and closes it again');
     check(/<title>Ben's Vacuum Game<\/title>/.test(shell) && />Ben's Vacuum Game<\/h1>/.test(shell) && man.name === "Ben's Vacuum Game" && !/Roomba/.test(shell + JSON.stringify(man)), "the game is called Ben's Vacuum Game wherever a player reads its name");
 }
 
