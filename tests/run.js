@@ -169,11 +169,11 @@ check(G('roomba.row') === 4 && G('roomba.col') === 5, 'up drives forward in the 
 G('handleFpDirection("down")');
 check(G('roomba.row') === 5 && G('roomba.dir') === 'up', 'down reverses without turning');
 G('startHold("left")');
-check(G('holdInterval') === null, 'holding a turn key does not auto-repeat in 3D');
+check(G('holdTimer') === null, 'holding a turn key does not auto-repeat in 3D');
 G('stopHold(); startHold("up")');
-check(G('holdInterval') !== null, 'holding forward does auto-repeat');
+check(G('holdTimer') !== null, 'holding forward does auto-repeat');
 G('stopHold()');
-check(G('holdInterval') === null && G('heldDir') === null, 'stopHold clears the hold');
+check(G('holdTimer') === null && G('heldDir') === null, 'stopHold clears the hold');
 
 section('Scoring and progression');
 G('viewMode = "TD"; initLevel(0); tryMove(0, -1); tryMove(-1, 0);');
@@ -538,6 +538,95 @@ section('Upgrade points from rooms of the day');
     check(G('progress.points') === 10, 'and is not paid again the next time it loads');
     check(G("JSON.stringify(sanitizeDailyStars({ '2026-11-01': 9, nonsense: 3, '2026-11-02': 0, '2026-11-03': 2 }))") === '{"2026-11-01":3,"2026-11-03":2}', 'saved daily stars with a bad date or count are tidied on load');
     G('localStorage.removeItem(SAVE_KEY); progress.unlocked = 0; progress.best = {}; progress.points = 0; progress.runs = {}; progress.dailyStars = {}; showHouse()');
+}
+
+// --- Taps and held moves ----------------------------------------------------------
+
+section('Taps and held moves');
+{
+    // A clock the test can wind forward, in place of the real timers
+    const clock = { now: 0, list: [], id: 0 };
+    const real = { st: sandbox.setTimeout, ct: sandbox.clearTimeout, si: sandbox.setInterval, ci: sandbox.clearInterval };
+    sandbox.setTimeout = (fn, ms) => { clock.list.push({ id: ++clock.id, at: clock.now + ms, fn, every: 0 }); return clock.id; };
+    sandbox.setInterval = (fn, ms) => { clock.list.push({ id: ++clock.id, at: clock.now + ms, fn, every: ms }); return clock.id; };
+    sandbox.clearTimeout = sandbox.clearInterval = (id) => { clock.list = clock.list.filter((t) => t.id !== id); };
+    const wait = (ms) => {
+        const end = clock.now + ms;
+        for (;;) {
+            const due = clock.list.filter((t) => t.at <= end).sort((a, b) => a.at - b.at)[0];
+            if (!due) break;
+            clock.now = due.at;
+            if (due.every) due.at += due.every; else clock.list = clock.list.filter((t) => t !== due);
+            due.fn();
+        }
+        clock.now = end;
+    };
+    const fresh = () => { G('stopHold(); showHouse(); progress.unlocked = 0; selectLevel(0); viewMode = "TD"'); clock.list = []; };
+
+    // The living room's dock is bottom right with open floor above it
+    fresh();
+    G('startHold("up")');
+    wait(160);
+    G('stopHold()');
+    wait(1000);
+    check(G('moves') === 1, `a press of 160 ms is one move, not two (it made ${G('moves')})`);
+
+    // The on-screen d-pad: a finger stays down longer than a key
+    const KEYS = G('HOLD_DELAY_KEYS'), TOUCH = G('HOLD_DELAY_TOUCH'), STEP = G('MOVE_INTERVAL'), FPSTEP = G('FP_MOVE_INTERVAL');
+    check(TOUCH >= 250 && KEYS >= 180 && TOUCH >= KEYS && KEYS > STEP, 'the pause before repeating is longer than a tap, and longer for fingers than for keys');
+    fresh();
+    G('dpadPress("up", true, 1000)');
+    check(G('moves') === 1, 'a touch on the d-pad moves at once');
+    wait(TOUCH - 1);
+    G('stopHold()');
+    wait(2000);
+    check(G('moves') === 1, 'a tap as long as a quarter of a second is still one move');
+
+    fresh();
+    G('dpadPress("up", true, 5000)');
+    wait(TOUCH);
+    check(G('moves') === 2, 'held past the pause, it starts to repeat');
+    wait(STEP * 3);
+    check(G('moves') === 5, 'and then repeats at the usual pace');
+    G('stopHold()');
+    wait(2000);
+    check(G('moves') === 5, 'letting go stops it at once');
+
+    fresh();
+    G('startHold("up")');
+    wait(KEYS - 1);
+    const beforeRepeat = G('moves');
+    wait(1 + STEP);
+    check(beforeRepeat === 1 && G('moves') === 3, 'a held key pauses, then repeats the same way');
+    G('stopHold()');
+
+    // Made-up mouse events after a touch must not press the button a second time
+    fresh();
+    G('dpadPress("up", true, 10000); stopHold()');
+    check(G('dpadPress("up", false, 10300)') === false && G('moves') === 1, 'a mouse press that trails a touch by a moment is ignored');
+    G('stopHold()');
+    check(G('dpadPress("up", false, 10000 + GHOST_MOUSE_MS)') === true && G('moves') === 2, 'a real mouse press later on still works');
+    G('stopHold()');
+
+    // Quick taps in a row are one move each
+    fresh();
+    for (let i = 0; i < 4; i++) { G(`dpadPress("up", true, ${20000 + i * 400})`); wait(140); G('stopHold()'); wait(120); }
+    check(G('moves') === 4, 'four quick taps are four moves');
+
+    // First person: forward repeats after the same pause, a turn never repeats
+    fresh();
+    G('viewMode = "FP"; roomba.dir = "up"; dpadPress("up", true, 30000)');
+    wait(TOUCH - 1);
+    const fpTap = G('moves');
+    wait(1 + FPSTEP);
+    check(fpTap === 1 && G('moves') === 3, 'in first person a tap forward is one tile, and a hold drives on');
+    G('stopHold(); dpadPress("left", true, 40000)');
+    wait(3000);
+    check(G('holdTimer') === null && G('roomba.dir') === 'left', 'a turn in first person is one quarter turn however long it is held');
+    G('stopHold(); viewMode = "TD"');
+
+    Object.assign(sandbox, { setTimeout: real.st, clearTimeout: real.ct, setInterval: real.si, clearInterval: real.ci });
+    G('stopHold(); showHouse()');
 }
 
 // --- The rest of the house -------------------------------------------------------

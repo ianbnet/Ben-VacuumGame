@@ -77,7 +77,8 @@ const NPC_STEP_INTERVAL = 195; // ms between NPC steps (50% slower)
 
 // Press-and-hold state
 let heldDir = null;
-let holdInterval = null;
+let holdTimer = null;
+let lastDpadTouchAt = -Infinity;
 let keysDown = new Set();
 
 // DOM elements
@@ -608,7 +609,9 @@ function handleDirection(dir) {
 }
 
 // === PRESS AND HOLD ===
-function startHold(dir) {
+// A press: one move at once, then, if it is still held after `delay`, a move every interval.
+// The pause before repeating is what makes a tap a single move (see HOLD_DELAY_KEYS in core.js).
+function startHold(dir, delay) {
     lastInputAt = performance.now();
     if (useGl()) window.gl3d.lookRelease(true);
     if (heldDir === dir) return;
@@ -618,20 +621,28 @@ function startHold(dir) {
     // Turning in 3D is one step per press. Auto-repeating it spins the camera.
     if (viewMode === 'FP' && (dir === 'left' || dir === 'right')) return;
     const interval = viewMode === 'FP' ? FP_MOVE_INTERVAL : MOVE_INTERVAL;
-    holdInterval = setInterval(() => {
-        if (heldDir === dir) {
-            handleDirection(dir);
-        } else {
-            stopHold();
-        }
-    }, interval);
+    const repeat = () => {
+        if (heldDir !== dir) return;
+        handleDirection(dir);
+        holdTimer = setTimeout(repeat, interval);
+    };
+    holdTimer = setTimeout(repeat, Math.max(interval, delay === undefined ? HOLD_DELAY_KEYS : delay));
+}
+
+// A press on the on-screen d-pad, by finger or by mouse. Some browsers follow a touch with
+// made-up mouse events; that press has already been handled, so those are ignored.
+function dpadPress(dir, fromTouch, now) {
+    if (fromTouch) lastDpadTouchAt = now;
+    else if (now - lastDpadTouchAt < GHOST_MOUSE_MS) return false;
+    startHold(dir, HOLD_DELAY_TOUCH);
+    return true;
 }
 
 function stopHold() {
     heldDir = null;
-    if (holdInterval) {
-        clearInterval(holdInterval);
-        holdInterval = null;
+    if (holdTimer) {
+        clearTimeout(holdTimer);
+        holdTimer = null;
     }
 }
 
@@ -1273,12 +1284,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         btn.addEventListener('mousedown', (e) => {
             e.preventDefault();
-            startHold(dir);
+            dpadPress(dir, false, performance.now());
         });
+        // Not passive, so preventDefault can stop the browser's follow-up mouse events
         btn.addEventListener('touchstart', (e) => {
             e.preventDefault();
-            startHold(dir);
-        });
+            dpadPress(dir, true, performance.now());
+        }, { passive: false });
     });
 
     // Stop hold on mouse/touch release anywhere

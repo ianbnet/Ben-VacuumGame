@@ -12,6 +12,11 @@ const CHARGER = 3;
 
 const MOVE_INTERVAL = 120;    // ms between moves when holding (top-down)
 const FP_MOVE_INTERVAL = 180; // slower in first person, where 8 tiles/s feels like a sprint
+// A press moves once straight away and only starts repeating after it has been held this long.
+// Without the pause an ordinary tap, which outlasts one repeat interval, moved the vacuum twice.
+const HOLD_DELAY_KEYS = 220;  // keyboard
+const HOLD_DELAY_TOUCH = 300; // the on-screen d-pad: a finger stays down longer than a key
+const GHOST_MOUSE_MS = 800;   // how long after a touch a browser may still send made-up mouse events
 const FRAME_MS = 1000 / 60;   // animation constants below are tuned for 60 fps and scaled by dt
 const BANNER_MS = 2800;       // how long the level-name banner stays up
 
