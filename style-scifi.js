@@ -208,8 +208,8 @@
             }
             case 'server': {
                 P.push(B([0, 2.1, 0], [lw - 0.03, 4.2, ld - 0.03], dark));
-                for (let i = 0; i < 6; i++) {
-                    const y = 0.5 + i * 0.6;
+                for (let i = 0; i < 4; i++) {
+                    const y = 0.6 + i * 0.9;
                     P.push(B([0, y, 0], [lw + 0.01, 0.02, ld + 0.01], M('gunmetal')));
                     const c = rnd() > 0.72 ? th.neon2 : th.neon;
                     P.push(B([(rnd() - 0.5) * 0.4, y + 0.24, 0], [0.14 + rnd() * 0.3, 0.03, ld + 0.025], glow(c, 3.4), { tag: rnd() > 0.5 ? 'flicker' : undefined, noShadow: true }));

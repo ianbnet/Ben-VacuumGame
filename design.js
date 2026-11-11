@@ -3,7 +3,11 @@
 // nothing here touches the DOM at load time, so tests can load it headlessly.
 
 const DESIGN_KEY = 'ben-vacuum-game.design.v1';
-const DESIGN_DEFAULTS = { lightColor: '#1A9A8A', flashOn: false, flashColor: '#FFE2A8', renderer: 'gl', quality: 'high' };
+// Phones and tablets start one quality preset down, since the 3D view asks a lot of them.
+// A choice the player has saved still wins.
+const DESIGN_ON_PHONE = typeof navigator !== 'undefined'
+    && (/Android|iPhone|iPad|iPod/.test(navigator.userAgent || '') || (/Macintosh/.test(navigator.userAgent || '') && navigator.maxTouchPoints > 1));
+const DESIGN_DEFAULTS = { lightColor: '#1A9A8A', flashOn: false, flashColor: '#FFE2A8', renderer: 'gl', quality: DESIGN_ON_PHONE ? 'medium' : 'high' };
 const RENDERERS = ['gl', 'classic'];
 const QUALITIES = ['low', 'medium', 'high', 'ultra'];
 

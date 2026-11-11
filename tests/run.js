@@ -598,6 +598,92 @@ section('Thirty rooms on five floors');
     G(`localStorage.removeItem(SAVE_KEY); progress.unlocked = 0; progress.best = {}; progress.points = 0; showHouse()`);
 }
 
+// --- Floor styles --------------------------------------------------------------
+
+section('Floor styles');
+{
+    check(G('S3_FLOOR_STYLE.length') === G('FLOOR_NAMES.length') && G('S3_FLOOR_STYLE[0]') === 'atomic', 'every floor names a style, and the ground floor keeps the atomic one');
+    let same = true;
+    for (let i = 0; i < 6; i++) if (G(`s3Theme(${i}) !== S3_THEMES[${i}] || s3Theme(${i}).style !== undefined`)) same = false;
+    check(same, 'the six ground floor rooms use the original themes, untouched');
+    check(G('s3Theme(6).style') === 'scifi' && G('s3Theme(6) === S3_STYLE_PACKS.scifi.themes[0] && s3Theme(11) === S3_STYLE_PACKS.scifi.themes[5]'), 'the second floor wears the sci-fi pack, one theme for each place on the floor');
+    G('LEVELS[SPECIAL_LEVEL] = { name: "x", theme: 9, batteryCost: 1, charger: { col: 0, row: 0 }, obstacles: [] }');
+    check(G('s3Theme(SPECIAL_LEVEL) === S3_THEMES[3]'), 'an extra room names one of the six atomic themes, whatever floors exist');
+    G('LEVELS.length = HOUSE_LEVELS');
+    check(G("s3PackTexture('scifi:panel') !== null && s3PackTexture('print:rocket') === null && s3PackTexture('plaster') === null"), 'a pack texture is found by its handle and nothing else is mistaken for one');
+
+    // Every registered pack keeps the contract in docs/style-pack-brief.md
+    const packProblems = `(function (name) {
+        const pack = S3_STYLE_PACKS[name];
+        const bad = [];
+        const SHAPES = ['box', 'cyl', 'sphere', 'torus', 'plane', 'rod', 'extrude', 'lathe', 'tube', 'gear', 'gem'];
+        const TIMES = ['morning', 'noon', 'afternoon', 'golden hour', 'dusk', 'night'];
+        const num = (v) => typeof v === 'number' && isFinite(v);
+        const checkParts = (parts, what) => {
+            if (!Array.isArray(parts) || !parts.length) { bad.push(what + ': no parts'); return; }
+            for (const p of parts) {
+                if (!SHAPES.includes(p.shape)) bad.push(what + ': unknown shape ' + p.shape);
+                if (!p.mat || typeof p.mat.color !== 'string') bad.push(what + ': a ' + p.shape + ' without a material colour');
+                const pts = p.shape === 'rod' ? [p.from, p.to] : [p.pos];
+                for (const q of pts) if (!Array.isArray(q) || q.length !== 3 || !q.every(num)) bad.push(what + ': a ' + p.shape + ' with a bad position');
+                if (typeof p.texture === 'string' && p.texture.indexOf(name + ':') === 0 && !s3PackTexture(p.texture)) bad.push(what + ': texture ' + p.texture + ' is not defined');
+            }
+        };
+        if (!pack.themes || pack.themes.length !== 6) bad.push('needs six themes');
+        const names = new Set();
+        (pack.themes || []).forEach((th, i) => {
+            const w = 'theme ' + (i + 1);
+            if (th.style !== name) bad.push(w + ': style is not ' + name);
+            if (!th.name || names.has(th.name)) bad.push(w + ': needs a name of its own');
+            names.add(th.name);
+            if (!TIMES.includes(th.time)) bad.push(w + ': time of day');
+            for (const k of ['walls', 'trim', 'ceiling', 'couch', 'pillow', 'couchWood', 'chair', 'table', 'leaf', 'planter', 'petbed', 'cat']) {
+                if (!/^#[0-9A-Fa-f]{6}$/.test(th[k] || '')) bad.push(w + ': colour ' + k);
+            }
+            if (!th.sun || !(th.sun.elevation >= 6 && th.sun.elevation <= 60 && Math.abs(th.sun.azimuth) <= 70)) bad.push(w + ': the sun must come in through the north window');
+            if (!th.lamp || typeof th.lamp.on !== 'boolean' || !num(th.lamp.intensity)) bad.push(w + ': lamp');
+            if (!th.accent || !['north', 'south', 'west', 'east'].includes(th.accent.wall)) bad.push(w + ': accent wall');
+            if (!th.door || !['south', 'west', 'east'].includes(th.door.wall) || !num(th.door.at)) bad.push(w + ': door');
+            if (th.fog && !(th.fog.density <= 0.02)) bad.push(w + ': haze too thick');
+            if (th.lights && th.lights.length > 8) bad.push(w + ': more than eight lights');
+            for (const [fn, lw, ld] of [['couch', 3, 1], ['table', 2, 2], ['chair', 1, 1], ['plant', 1, 1], ['petbed', 2, 1]]) {
+                if (pack[fn]) checkParts(pack[fn](lw, ld, th, 7), w + ' ' + fn);
+            }
+            if (pack.wall) {
+                const parts = pack.wall({ w: 1, h: 1, col: 3, row: 4 }, th);
+                checkParts(parts, w + ' wall');
+                if (parts.length > 9) bad.push(w + ': a wall tile of ' + parts.length + ' parts');
+            }
+            if (pack.dock) {
+                const parts = pack.dock(th);
+                checkParts(parts, w + ' dock');
+                if (!parts.every((p) => p.shape === 'rod' || p.pos[1] < 0.12 || Math.hypot(p.pos[0], p.pos[2]) > 0.3)) bad.push(w + ': something tall stands where the vacuum parks');
+            }
+            if (pack.architecture) {
+                const arch = pack.architecture(0, th);
+                checkParts(arch, w + ' room');
+                if (arch.filter((p) => p.tag === 'glass').length !== 1) bad.push(w + ': the window needs exactly one pane of glass');
+                if (arch.filter((p) => p.tag === 'slat').length < 6) bad.push(w + ': the window needs at least six blades');
+                if (arch.length > 260) bad.push(w + ': a room shell of ' + arch.length + ' parts');
+            }
+            if (pack.palette2d) {
+                const pal = pack.palette2d(th);
+                for (const k of ['floorBase', 'glaze', 'film']) if (!Array.isArray(pal[k]) || pal[k].length !== 3) bad.push(w + ': palette ' + k);
+            }
+        });
+        return bad;
+    })`;
+    for (const name of G('Object.keys(S3_STYLE_PACKS)')) {
+        const bad = G(`${packProblems}(${JSON.stringify(name)})`);
+        for (const line of bad.slice(0, 8)) console.error(`  ${name}: ${line}`);
+        check(bad.length === 0, `the ${name} pack keeps the style pack contract (${bad.length} problems)`);
+    }
+
+    const shell = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+    const man = JSON.parse(fs.readFileSync(path.join(root, 'manifest.json'), 'utf8'));
+    check(/<title>Ben's Vacuum Game<\/title>/.test(shell) && />Ben's Vacuum Game<\/h1>/.test(shell) && man.name === "Ben's Vacuum Game" && !/Roomba/.test(shell + JSON.stringify(man)), "the game is called Ben's Vacuum Game wherever a player reads its name");
+}
+
 // --- Home screen install ------------------------------------------------------
 
 section('Home screen install');

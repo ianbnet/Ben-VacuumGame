@@ -33,8 +33,18 @@ Decisions taken without asking (change any of them):
 
 ## Status
 
-- [ ] 1 plumbing and engine
-- [ ] 2 sci-fi 3D
-- [ ] 3 steampunk 3D
-- [ ] 4 2D board
-- [ ] 5 tests and notes
+Asked for later the same day: floor 4 as a blocky voxel dungeon, floor 5 as a glowing dragon
+wonderworld (both as original designs, with no franchise names or characters), and the game
+renamed to Ben's Vacuum Game.
+
+- [x] 1 plumbing and engine (commit f967c78)
+- [x] 2 sci-fi floor, 3D and 2D, checked in the browser (`style-scifi.js`)
+- [x] rename to Ben's Vacuum Game
+- [ ] 3 steampunk floor (`style-steam.js`), being written to `docs/style-pack-brief.md`
+- [ ] 4 voxel dungeon floor (`style-voxel.js`), same
+- [ ] 5 dragon wonderworld floor (`style-wonder.js`), same
+- [ ] add the three script tags to index.html after `style-scifi.js`, then look at every new
+      floor in the browser in 2D and 3D and tune light the way sci-fi was tuned (glow about half
+      of what looks right on paper, `fill` plus ambient near 0.85 in dark rooms, `lamp.down`)
+- [ ] tests: add "all five floor styles are registered" once the three files exist
+- [ ] README and change log sections for the floor styles; speed check at the Low preset
