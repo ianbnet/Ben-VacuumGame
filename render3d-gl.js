@@ -1486,7 +1486,15 @@ function render(view, dtMs, fly) {
 
     // Tagged animations
     const T = G.tagged;
-    if (T.blink) for (const m of T.blink) m.material.emissiveIntensity = (Math.sin(G.time * 3) > 0.6) ? 4 : 0.3;
+    // The dock's beacon blinks in proportion to its own glow: a small bulb flashes hard, a big
+    // crystal only brightens, so it never floods the view when the vacuum faces it
+    if (T.blink) {
+        const on = Math.sin(G.time * 3) > 0.6;
+        for (const m of T.blink) {
+            const glow = m.userData.base.glow || 2.5;
+            m.material.emissiveIntensity = on ? Math.min(4, glow * 1.6) : Math.min(0.3, glow * 0.25);
+        }
+    }
     if (T.dockRing) for (const m of T.dockRing) m.material.emissiveIntensity = 0.5 + 0.25 * Math.sin(G.time * 2.4);
     if (T.cat) for (const m of T.cat) m.scale.y = m.userData.base.sy * (1 + 0.045 * Math.sin(G.time * 1.9));
     if (T.catHead) for (const m of T.catHead) m.position.y = m.userData.base.y + 0.012 * Math.sin(G.time * 1.9);
