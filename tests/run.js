@@ -607,6 +607,15 @@ section('Floor styles');
     for (let i = 0; i < 6; i++) if (G(`s3Theme(${i}) !== S3_THEMES[${i}] || s3Theme(${i}).style !== undefined`)) same = false;
     check(same, 'the six ground floor rooms use the original themes, untouched');
     check(G('s3Theme(6).style') === 'scifi' && G('s3Theme(6) === S3_STYLE_PACKS.scifi.themes[0] && s3Theme(11) === S3_STYLE_PACKS.scifi.themes[5]'), 'the second floor wears the sci-fi pack, one theme for each place on the floor');
+    check(G("S3_FLOOR_STYLE.every((name) => name === 'atomic' || !!S3_STYLE_PACKS[name])") && G('new Set(S3_FLOOR_STYLE).size') === 5, 'every floor above the ground floor has its own registered style pack');
+    let floorsOk = true;
+    for (let lv = 6; lv < G('HOUSE_LEVELS'); lv++) {
+        if (G(`s3Theme(${lv}).style`) !== G(`S3_FLOOR_STYLE[Math.floor(${lv} / FLOOR_SIZE)]`)) floorsOk = false;
+    }
+    check(floorsOk, 'every room above the ground floor wears the style of its floor');
+    const themeNames = [];
+    for (let lv = 0; lv < G('HOUSE_LEVELS'); lv++) themeNames.push(G(`s3Theme(${lv}).name`));
+    check(new Set(themeNames).size === G('HOUSE_LEVELS'), 'all thirty rooms have a theme name of their own');
     G('LEVELS[SPECIAL_LEVEL] = { name: "x", theme: 9, batteryCost: 1, charger: { col: 0, row: 0 }, obstacles: [] }');
     check(G('s3Theme(SPECIAL_LEVEL) === S3_THEMES[3]'), 'an extra room names one of the six atomic themes, whatever floors exist');
     G('LEVELS.length = HOUSE_LEVELS');
