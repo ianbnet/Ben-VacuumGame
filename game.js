@@ -48,9 +48,10 @@ let bestGhost = null;     // the best recorded run in this room, replayed alongs
 
 // Saved progress (localStorage): highest level reached, best result per level, upgrade points and levels
 const SAVE_KEY = 'ben-vacuum-game.progress.v1';
-let progress = { unlocked: 0, best: {}, bestScore: 0, points: 0, upgrades: {}, runs: {}, rooms: [], raceBest: true };
+let progress = { unlocked: 0, best: {}, bestScore: 0, points: 0, upgrades: {}, runs: {}, dailyStars: {}, rooms: [], raceBest: true };
 const MAX_SAVED_ROOMS = 24;
 const MAX_DAILY_RUNS = 150;
+const MAX_DAILY_STARS = 800; // days of the room of the day whose stars are remembered as paid for
 
 // === FIRST-PERSON MODE ===
 let viewMode = 'TD'; // 'TD' = top-down, 'FP' = first-person
@@ -187,6 +188,17 @@ function loadProgress() {
             progress.points = Math.max(0, s.points | 0);
             progress.upgrades = sanitizeUpgrades(s.upgrades);
             progress.runs = sanitizeRuns(s.runs);
+            if (s.dailyStars && typeof s.dailyStars === 'object') progress.dailyStars = sanitizeDailyStars(s.dailyStars);
+            else {
+                // A save from before rooms of the day paid points: pay now, once, for the
+                // stars its saved runs already earned
+                progress.dailyStars = {};
+                for (const key of Object.keys(progress.runs)) {
+                    if (!/^d\d{4}-\d{2}-\d{2}$/.test(key)) continue;
+                    progress.dailyStars[key.slice(1)] = progress.runs[key].stars;
+                    progress.points += progress.runs[key].stars;
+                }
+            }
             progress.rooms = sanitizeRooms(s.rooms);
             progress.raceBest = s.raceBest !== false;
         }
@@ -211,6 +223,19 @@ function sanitizeRuns(raw) {
         const r = raw[key];
         if (key.length > 40 || !r || typeof r.path !== 'string' || !/^[UDLR]{1,4000}$/.test(r.path)) continue;
         out[key] = { moves: r.path.length, stars: Math.max(1, Math.min(3, r.stars | 0)), path: r.path };
+    }
+    return out;
+}
+
+// Stars already paid for on rooms of the day: a date and one to three stars. Kept apart from
+// the saved runs, which are pruned, so a day can never pay for the same star twice.
+function sanitizeDailyStars(raw) {
+    const out = {};
+    if (!raw || typeof raw !== 'object') return out;
+    const days = Object.keys(raw).filter((k) => /^\d{4}-\d{2}-\d{2}$/.test(k)).sort().slice(-MAX_DAILY_STARS);
+    for (const day of days) {
+        const stars = raw[day] | 0;
+        if (stars >= 1) out[day] = Math.min(3, stars);
     }
     return out;
 }
@@ -520,12 +545,19 @@ function completeLevel() {
     const bonus = 200 + underPar * 10;
     const stars = moves <= parMoves ? 3 : moves <= parMoves * 1.25 ? 2 : 1;
     score += bonus;
-    // Upgrade points: one for every star earned on a house room for the first time. The room
-    // of the day and built rooms keep a best run but pay no points, so the house stays the goal.
+    // Upgrade points: one for every star earned for the first time, on a house room or on a
+    // room of the day (any day's, so nothing is lost by missing one). Built rooms keep a best
+    // run but pay no points: a player could build a room to farm them.
     const house = roomMode === 'house';
+    const daily = roomMode === 'daily' && !!dailyKey;
     const prevBest = house ? progress.best[currentLevel] : null;
-    const points = house ? Math.max(0, stars - (prevBest ? prevBest.stars : 0)) : 0;
+    const paidStars = house ? (prevBest ? prevBest.stars : 0) : daily ? progress.dailyStars[dailyKey] | 0 : 0;
+    const points = house || daily ? Math.max(0, stars - paidStars) : 0;
     progress.points = (progress.points | 0) + points;
+    if (daily && stars > paidStars) {
+        progress.dailyStars[dailyKey] = stars;
+        progress.dailyStars = sanitizeDailyStars(progress.dailyStars);
+    }
     const key = roomKey();
     const prevRun = progress.runs[key];
     const newBest = saveRun(key, { moves, stars }, runPath);

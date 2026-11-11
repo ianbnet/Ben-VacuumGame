@@ -478,7 +478,9 @@ G("openDaily('2026-11-09')");
 const dayRoom = G("validateRoom(LEVELS[SPECIAL_LEVEL])");
 check(G('roomMode') === 'daily' && G('currentLevel') === G('SPECIAL_LEVEL') && G('LEVELS.length') === G('HOUSE_LEVELS') + 1 && G('totalDirty') === dayRoom.tiles && G('roomKey()') === 'd2026-11-09' && G('gameState') === 'PLAYING', 'the room of the day loads into the extra slot and starts');
 check(G('s3Theme(currentLevel) === S3_THEMES[LEVELS[SPECIAL_LEVEL].theme]') && G('scene.level') === -1, 'it wears its own theme, and what was cached for the slot is thrown away');
-check(G(drivePar) === 'LEVEL_COMPLETE' && G('levelResult.points') === 0 && G('JSON.stringify({ points: progress.points, best: progress.best, unlocked: progress.unlocked })') === before, 'finishing it pays no upgrade points and leaves the house progress alone');
+const was = JSON.parse(before);
+check(G(drivePar) === 'LEVEL_COMPLETE' && G('levelResult.stars') === 3 && G('levelResult.points') === 3 && G('progress.points') === was.points + 3 && G("progress.dailyStars['2026-11-09']") === 3, 'finishing it at par pays three upgrade points, one for each star');
+check(G('JSON.stringify({ best: progress.best, unlocked: progress.unlocked })') === JSON.stringify({ best: was.best, unlocked: was.unlocked }), 'and leaves the house progress alone');
 check(G("progress.runs['d2026-11-09'].moves") === G('moves'), 'it does keep a best run of its own');
 G('nextLevel()');
 check(G('currentLevel') === G('SPECIAL_LEVEL') && G('gameState') === 'LEVEL_COMPLETE', 'there is no next room after the room of the day');
@@ -513,6 +515,30 @@ check(G('progress.rooms.length') === 2 && G('gameState') === 'EDITING' && G('bui
 check(G("JSON.stringify(sanitizeRooms([{ id: 'a1', name: 'Ok', code: '1.0.1.00.' }, { id: 'a1', name: 'Twin', code: '1.0.1.00.' }, { id: 'BAD ID', name: 'x', code: '1.0.1.00.' }, { id: 'b2', name: 'x', code: 'junk' }]))") === '[{"id":"a1","name":"Ok","code":"1.0.1.00."}]', 'saved rooms with a bad id, a twin id or a code that no longer decodes are dropped on load');
 G('showHouse()');
 check(G('roomMode') === 'house' && G('gameState') === 'PLAYING' && G('HOUSE_LEVELS') === 30, 'and the house is still there afterwards');
+
+// --- Upgrade points from rooms of the day ------------------------------------------
+
+section('Upgrade points from rooms of the day');
+{
+    // two wasted moves: one tile out from the dock and straight back
+    const wiggle = `(() => { for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { if (tryMove(dc, dr)) { tryMove(-dc, -dr); return true; } } return false; })()`;
+    const pts = G('progress.points');
+    G("openDaily('2026-11-09')");
+    check(G(drivePar) === 'LEVEL_COMPLETE' && G('levelResult.points') === 0 && G('progress.points') === pts, 'playing the same day again for the same stars pays nothing more');
+    G("delete progress.runs['d2026-11-09']; restartLevel()");
+    check(G(drivePar) === 'LEVEL_COMPLETE' && G('levelResult.points') === 0 && G('progress.points') === pts && G("progress.dailyStars['2026-11-09']") === 3, 'a day never pays for the same star twice, even after its saved run has been dropped');
+    G("openDaily('2026-11-07')");
+    check(G(wiggle) === true && G(drivePar) === 'LEVEL_COMPLETE' && G('levelResult.stars') === 2 && G('levelResult.points') === 2 && G('progress.points') === pts + 2, 'an earlier day pays too: two stars, two points');
+    G('restartLevel()');
+    check(G(drivePar) === 'LEVEL_COMPLETE' && G('levelResult.stars') === 3 && G('levelResult.points') === 1 && G('progress.points') === pts + 3 && G("progress.dailyStars['2026-11-07']") === 3, 'and a better run on it pays only for the star that is new');
+
+    G(`localStorage.setItem(SAVE_KEY, JSON.stringify({ unlocked: 0, points: 5, runs: { 'd2026-11-01': { stars: 2, path: 'UDL' }, 'd2026-11-02': { stars: 3, path: 'UD' }, h0: { stars: 3, path: 'UDL' }, cabc: { stars: 3, path: 'UD' } } })); loadProgress()`);
+    check(G('progress.points') === 10 && G('JSON.stringify(progress.dailyStars)') === '{"2026-11-01":2,"2026-11-02":3}', 'a save from before this rule is paid once for the stars its saved days had already earned');
+    G('saveProgress(); loadProgress()');
+    check(G('progress.points') === 10, 'and is not paid again the next time it loads');
+    check(G("JSON.stringify(sanitizeDailyStars({ '2026-11-01': 9, nonsense: 3, '2026-11-02': 0, '2026-11-03': 2 }))") === '{"2026-11-01":3,"2026-11-03":2}', 'saved daily stars with a bad date or count are tidied on load');
+    G('localStorage.removeItem(SAVE_KEY); progress.unlocked = 0; progress.best = {}; progress.points = 0; progress.runs = {}; progress.dailyStars = {}; showHouse()');
+}
 
 // --- The rest of the house -------------------------------------------------------
 

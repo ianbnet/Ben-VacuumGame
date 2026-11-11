@@ -32,7 +32,7 @@ Then open http://localhost:3000. Any static file server works (`npm start` runs 
 | Space | Next level once a level is complete; ends the ghost replay. |
 | G | Watch the ghost run the par route, at any time. Press V during it to ride along in 3D; Space or G ends it. |
 | B | Race my best on / off: the gold ghost of your best run in this room. |
-| U | Upgrades panel. Every new star on a level is a point to spend on the vacuum or the charger. |
+| U | Upgrades panel. Every new star on a house room or a room of the day is a point to spend on the vacuum or the charger. |
 | M | Mute / unmute. |
 | Design button | Colour wheels for the vacuum's lights and its flashlight. |
 | H or ? | Help. |
@@ -44,7 +44,7 @@ The on-screen d-pad, level buttons and panel buttons do the same things and work
 The bar at the top of the page picks what to play.
 
 - **The House.** Thirty rooms on five floors, in order. Each floor ends on a harder room, and room 30 is the hardest of all. The picker shows one floor at a time; its arrows browse the others. Stars here earn upgrade points.
-- **Room of the Day.** One new room each calendar day, generated from the date, so it is the same room for everyone. The arrows go back through earlier days. There are no streaks and nothing is lost by skipping a day. It keeps a best run and pays no upgrade points.
+- **Room of the Day.** One new room each calendar day, generated from the date, so it is the same room for everyone. The arrows go back through earlier days. There are no streaks and nothing is lost by skipping a day: every day's room, today's or an earlier one, pays an upgrade point for each star the first time you earn it. It keeps a best run.
 - **Build a Room.** An editor on the board: place sofas, tables, chairs, plants, pet beds, walls and the dock, pick one of the six themes and a battery difficulty, and play it. The game checks that every tile can be reached and returned from on one charge and marks the tiles that cannot. Rooms save as you build. **Copy link** makes a link that opens the room for someone else, with no server involved: the whole room is in the link. While building, click to place, drag to paint walls or erase, R turns a sofa or pet bed, 1 to 8 pick a tool, Space plays.
 - **Race my best.** Finish any room and the run is saved. Next time a gold ghost drives it, one step for each of yours, and the panel says how many tiles ahead or behind you are. It shows in 2D, in the GPU 3D view, and as a dot on the minimap in the Classic 3D view.
 

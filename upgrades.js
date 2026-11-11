@@ -1,6 +1,6 @@
 // === UPGRADES ===
 // Classic script sharing globals; nothing touches the DOM at load time.
-// Every new star earned on a level is one upgrade point. Points buy levels of five upgrades,
+// Every new star earned on a house room or a room of the day is one upgrade point. Points buy levels of five upgrades,
 // three on the vacuum and two on the charger. Progress holds the points and the levels.
 
 const UPGRADES = [

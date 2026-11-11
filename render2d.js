@@ -1315,7 +1315,9 @@ function drawOverlay() {
         uiText(`Tiles ${r.tileScore}  +  Bonus ${r.bonus}  =  ${score} total`, cx, cy + 16, 16, 'rgba(242, 232, 213, 0.8)', 'center', '400');
 
         const dim = 'rgba(242, 232, 213, 0.5)';
-        if (roomMode === 'house') {
+        // House rooms always say what the run earned. A room of the day says so when it earned
+        // something, and otherwise talks about the best run, like a built room.
+        if (roomMode === 'house' || (roomMode === 'daily' && (r.points | 0) > 0)) {
             const earned = r.points | 0;
             const available = progress.points | 0;
             uiText(
@@ -1402,7 +1404,7 @@ function drawHelp() {
         ['Race my best', 'Your best run in each room comes back as a gold ghost, one step for each of yours. B or the switch at the top hides it.'],
         ['Room of the day', 'A new room every day, the same for everyone. The arrows at the top go back to earlier days.'],
         ['Build a room', 'Place furniture, walls and the dock, pick a theme, then play it. Copy link sends your room to someone else.'],
-        ['Upgrades', 'Each new star on a house room is a point. U or the Upgrades button spends them on the vacuum or the charger.'],
+        ['Upgrades', 'Each new star on a house room or a room of the day is a point. U or the Upgrades button spends them.'],
         ['Lights', 'F switches the flashlight on and off. The Design button opens colour wheels for the lights and the flashlight.'],
         ['Full screen', 'Enter or the Full screen button fills the screen with the game. Enter again or Escape leaves it.'],
         ['Sound, help', 'M or the Sound button mutes and unmutes. H or ? shows this screen. Escape closes it.'],
