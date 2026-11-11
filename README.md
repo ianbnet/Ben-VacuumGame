@@ -53,6 +53,7 @@ The bar at the top of the page picks what to play.
 | `rooms.js` | Rooms beyond the house, with no DOM: the piece catalogue, validation, the room code used for saving and share links, dates, the daily generator, the editor's placement rules, and the replay of a recorded run. |
 | `game.js` | Game state, level setup, movement rules, input, saved progress, room modes, recorded runs and the best-run ghost, level select, the frame loop. |
 | `levels.js` | Rooms 7 to 30, drawn as text maps, and the reader that turns a map into a level. Counts the house. |
+| `style-*.js` | One style pack per floor above the ground floor: themes, 3D builders, floor and backdrop painters, 2D painters. |
 | `modes.js` | The bar at the top (The House, Room of the Day, Build a Room, Race my best) and the room editor on the board. |
 | `install.js` | The home screen prompt for phones and tablets. |
 | `render2d.js` | The top-down view in the atomic-age themes: the furniture painters (sofa, kidney table, shell chair, snake plant, pet bed, counters, crates, neon panels), the chrome dock, the vacuum and its ghost, cleaning effects, overlays, banner and help. |
@@ -75,6 +76,29 @@ Extra rooms are loaded into one slot after the thirty house levels (`LEVELS[SPEC
 ```bash
 node tests/run.js
 ```
+
+## A look for every floor
+
+Each floor of the house wears its own style, in both the 2D board and the 3D view.
+
+| Floor | Style | File |
+|---|---|---|
+| Ground floor | 1950s atomic age, the original look | `scene3d.js` |
+| Upstairs | 2020s science fiction: dark panels, wet decks, neon, a megacity in the rain | `style-scifi.js` |
+| The annex | Baroque and Victorian steampunk: brass, velvet, gaslight, airships | `style-steam.js` |
+| The works | A blocky voxel dungeon: stone brick, planks, torches | `style-voxel.js` |
+| The tower | A glowing dragon wonderworld: crystals, giant mushrooms, aurora skies | `style-wonder.js` |
+
+A style pack is one file that registers six themes and its own furniture, room shell, floor,
+backdrop and 2D painters. Anything a pack leaves out falls back to the atomic builders, which is
+how the ground floor stays exactly as it was. `docs/style-pack-brief.md` is the contract for
+writing one, and the tests hold every pack to it. The room of the day and built rooms keep the
+six atomic themes.
+
+The 3D view was lifted for every floor at the same time: turned and faceted shapes, textures
+with bump maps, a style's own coloured lights, haze and colour grade, a ceiling lamp that casts
+shadows, and sharper reflections at the High and Ultra presets. Phones and tablets start on the
+Medium preset.
 
 ## Home screen icon
 
