@@ -986,22 +986,30 @@ function buildVacuumBody() {
     const lensMat = new THREE.MeshPhysicalMaterial({ color: '#FFE2A8', emissive: '#FFE2A8', emissiveIntensity: 0, roughness: 0.2, clearcoat: 1 });
     const lens = new THREE.Mesh(new THREE.SphereGeometry(0.012, 12, 8), lensMat);
     lens.position.set(0, -0.09, 0.235);
-    // The corner brush, shown when that upgrade is fitted: a hub out past the bumper with a
-    // fan of bristles that spins as the vacuum drives
+    // The corner brush, shown when that upgrade is fitted: a slim post standing on the bumper
+    // at the front left, ringed with rows of fine bristles, spinning as the vacuum drives.
+    // Matte and fairly dark so the vacuum's own light does not blow it out so close to the lens.
     const brush = new THREE.Group();
-    const brass = new THREE.MeshPhysicalMaterial({ color: '#D9A441', metalness: 1, roughness: 0.3 });
-    const bristle = new THREE.MeshPhysicalMaterial({ color: '#F4D98C', roughness: 0.8 });
-    brush.add(new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.03, 12), brass));
-    for (let i = 0; i < 5; i++) {
-        const b = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.008, 0.016), bristle);
-        const a = (i / 5) * Math.PI * 2;
-        b.position.set(Math.cos(a) * 0.075, -0.012, Math.sin(a) * 0.075);
-        b.rotation.y = -a;
-        brush.add(b);
+    const brass = new THREE.MeshPhysicalMaterial({ color: '#B8892E', metalness: 0.9, roughness: 0.45 });
+    const bristle = new THREE.MeshPhysicalMaterial({ color: '#A9812C', metalness: 0, roughness: 1 });
+    bristle.envMapIntensity = 0.3;
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.007, 0.009, 0.07, 10), brass);
+    post.position.y = 0.035;
+    brush.add(post);
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.011, 10, 8), brass);
+    cap.position.y = 0.072;
+    brush.add(cap);
+    for (let row = 0; row < 3; row++) {
+        for (let i = 0; i < 7; i++) {
+            const a = (i / 7) * Math.PI * 2 + row * 0.45;
+            const b = new THREE.Mesh(new THREE.BoxGeometry(0.042, 0.003, 0.005), bristle);
+            b.position.set(Math.cos(a) * 0.026, 0.014 + row * 0.02, Math.sin(a) * 0.026);
+            b.rotation.set(0, -a, -0.3);
+            brush.add(b);
+        }
     }
-    // just ahead of the bumper and left of centre, where the low camera can see it
-    brush.position.set(0.13, -0.082, 0.4);
-    brush.scale.set(1.5, 1.5, 1.5);
+    brush.position.set(0.125, -0.088, 0.275);
+    brush.scale.set(0.85, 0.85, 0.85);
     brush.visible = false;
     body.add(hood, rim, ring, lens, brush);
     body.rotation.y = Math.PI; // the arc opens towards the viewer; flip so it curves away ahead
