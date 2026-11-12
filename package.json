@@ -7,6 +7,6 @@
     "start": "python3 serve.py 3000",
     "test": "node tests/run.js",
     "deploy:check": "node scripts/publish-netlify.mjs --check",
-    "deploy": "node tests/run.js && node scripts/publish-netlify.mjs --publish"
+    "deploy": "node tests/run.js && npm --prefix \"$HOME/code/badweasley\" run deploy:vacuum && npm --prefix \"$HOME/code/badweasley\" run verify"
   }
 }

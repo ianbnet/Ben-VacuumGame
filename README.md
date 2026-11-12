@@ -149,19 +149,23 @@ home screen game keeps its own saves, separate from the same site in Safari.
 
 ## Publishing
 
-The game is live at <https://robot-vacuum-game.netlify.app>, as its own Netlify project.
-`scripts/publish-netlify.mjs` uploads only what the page needs: `index.html`, the files it
-loads and the vendored three.js. Docs, tests and tools stay behind.
+The game is live at <https://vacuum.badweasley.com>, served by the Cloudflare Worker
+`badweasley-vacuum`. It moved there from Netlify on 11 November 2026.
+`robot-vacuum-game.netlify.app` is the old address and is no longer updated.
 
 ```sh
 npm run deploy:check   # list what would ship; no network
-npm run deploy         # run the tests, publish, then check every file Netlify serves
+npm run deploy         # run the tests, then build, deploy and verify from ~/code/badweasley
 ```
 
-Publishing needs everything committed and the git-ignored `.env.netlify.local`, which holds
-`NETLIFY_AUTH_TOKEN` and `NETLIFY_SITE_ID`. Netlify tokens expire, so an HTTP 401 means it is
-time for a new one. The script refuses to publish to any site not named `robot-vacuum-game`.
-Room share links carry the site address, so renaming the site breaks links already sent.
+- The Cloudflare side lives in `~/code/badweasley` (`npm run deploy:vacuum`, then `npm run verify`).
+  Its build calls this repo's `scripts/publish-netlify.mjs --stage`, which copies only what the page
+  needs: `index.html`, the files it loads and the vendored three.js. Docs, tests and tools stay behind.
+- The script keeps its old name. Its Netlify upload modes (`--create`, `--draft`, `--publish`) now
+  refuse to run.
+- Commit before publishing: the live site's `X-Build` header names the commit it was built from.
+- Everything under badweasley.com is on Cloudflare's free plans. The rules for publishing there are
+  in `~/code/badweasley/PUBLISHING.md`.
 
 ## History
 

@@ -27,6 +27,11 @@ const envFile = path.join(root, '.env.netlify.local');
 const MODES = ['--check', '--stage', '--create', '--draft', '--publish', '--verify', '--verify-draft'];
 const mode = process.argv[2] ?? '--check';
 assert(MODES.includes(mode), `Use one of: ${MODES.join(', ')}.`);
+// Netlify is retired (November 2026). The game is published to Cloudflare from
+// ~/code/badweasley, whose build calls --stage here. See CLAUDE.md. The upload
+// modes stay in this file for history but refuse to run.
+assert(!['--create', '--draft', '--publish'].includes(mode),
+  'Netlify publishing is retired. The live game is https://vacuum.badweasley.com: use `npm run deploy`. See CLAUDE.md.');
 const isDraft = mode === '--draft' || mode === '--verify-draft';
 const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
 const sha1 = bytes => createHash('sha1').update(bytes).digest('hex');
