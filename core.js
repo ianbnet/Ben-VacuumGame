@@ -17,6 +17,8 @@ const FP_MOVE_INTERVAL = 180; // slower in first person, where 8 tiles/s feels l
 const HOLD_DELAY_KEYS = 220;  // keyboard
 const HOLD_DELAY_TOUCH = 300; // the on-screen d-pad: a finger stays down longer than a key
 const GHOST_MOUSE_MS = 800;   // how long after a touch a browser may still send made-up mouse events
+const RESERVE_MOVES = 6;      // the reserve cell: this many ordinary moves, once a room, when the battery dies
+const PAD_EVERY = 10;         // the travel pad can be used in one room out of this many
 const FRAME_MS = 1000 / 60;   // animation constants below are tuned for 60 fps and scaled by dt
 const BANNER_MS = 2800;       // how long the level-name banner stays up
 
@@ -292,6 +294,24 @@ function bfsPath(g, fromCol, fromRow, toCol, toRow) {
     }
     path.reverse();
     return path;
+}
+
+// The dead-end tiles next to (col, row) that a corner brush can reach: dirty, and with no way
+// in or out except through this tile. Shared by the game and by the replay of a saved run.
+function cornerBrushTargets(g, col, row) {
+    const dirs = [[0, -1], [0, 1], [-1, 0], [1, 0]];
+    const out = [];
+    for (const [dc, dr] of dirs) {
+        const c = col + dc, r = row + dr;
+        if (c < 0 || c >= COLS || r < 0 || r >= ROWS || g[r][c] !== DIRTY) continue;
+        let open = 0;
+        for (const [ec, er] of dirs) {
+            const x = c + ec, y = r + er;
+            if (x >= 0 && x < COLS && y >= 0 && y < ROWS && g[y][x] !== OBSTACLE) open++;
+        }
+        if (open === 1) out.push({ col: c, row: r });
+    }
+    return out;
 }
 
 // Build the grid for a level (used by solver). Takes a level index or a room object.

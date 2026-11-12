@@ -69,6 +69,10 @@ function fpDrawHudGl(view) {
         hudText(`${left} TILE${left === 1 ? '' : 'S'} LEFT`, 18, 22, 12, '#FFFFFF', 'left', '600', 2);
         const dockText = dockDist < 0 ? 'DOCK UNREACHABLE' : dockDist === 0 ? 'ON THE DOCK' : `DOCK ${dockDist} MOVE${dockDist === 1 ? '' : 'S'}${needsDock ? '  ·  HEAD BACK' : ''}`;
         hudText(dockText, 18, 40, 10.5, needsDock ? '#FF8A7A' : 'rgba(210,232,255,0.9)', 'left', '500', 1.5);
+        if (typeof hasTripComputer === 'function' && hasTripComputer()) {
+            const n = chargeMoves();
+            hudText(`CHARGE ${n} MOVE${n === 1 ? '' : 'S'}`, 18, 56, 10.5, dockDist > 0 && n < dockDist + 2 ? '#FF8A7A' : 'rgba(210,232,255,0.9)', 'left', '500', 1.5);
+        }
         if (design.flashOn) {
             const [fr, fg, fb] = design.flashRgb;
             ctx.save();

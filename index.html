@@ -84,6 +84,10 @@
                     <span class="stat-label">Dock</span>
                     <span id="dockDist" class="stat-value">--</span>
                 </div>
+                <div class="stat" id="tripStat" hidden>
+                    <span class="stat-label">Charge</span>
+                    <span id="tripMoves" class="stat-value">--</span>
+                </div>
                 <div class="stat" id="bestStat" hidden>
                     <span class="stat-label">Vs your best</span>
                     <span id="bestDelta" class="stat-value">--</span>
@@ -118,6 +122,7 @@
                 <button id="btnDesign" class="action-btn action-btn-quiet" aria-expanded="false" aria-controls="designPanel">Design</button>
                 <button id="btnUpgrades" class="action-btn action-btn-quiet" aria-expanded="false" aria-controls="upgradePanel">Upgrades</button>
                 <button id="btnGhost" class="action-btn action-btn-quiet">Ghost</button>
+                <button id="btnPad" class="action-btn" hidden>Drop pad</button>
                 <button id="btnCredits" class="action-btn action-btn-quiet" aria-expanded="false" aria-controls="creditsPanel">Credits</button>
                 <button id="btnInstall" class="action-btn action-btn-quiet" hidden>Home screen</button>
             </div>
@@ -131,6 +136,7 @@
                 </div>
             </div>
             <p class="upgrade-hint">Every new star you earn in the house or on a room of the day is one point. Upgrades apply straight away.</p>
+            <label class="switch upgrade-option"><input type="checkbox" id="reserveToggle"><span class="track" aria-hidden="true"></span><span><strong>Reserve cell.</strong> Six emergency moves, once a room, when the battery runs out. Free: on or off as you like.</span></label>
             <div class="upgrade-groups" id="upgradeList"></div>
         </div>
         <div id="designPanel" class="design-panel" hidden>
@@ -175,7 +181,7 @@
                 </dl>
             </div>
         </div>
-        <div id="legend">Arrows / WASD move (hold to keep going) &middot; V 3D view &middot; Enter full screen &middot; G par ghost &middot; B race my best &middot; F flashlight &middot; U upgrades &middot; R restart &middot; Space next level &middot; M sound &middot; H help</div>
+        <div id="legend">Arrows / WASD move (hold to keep going) &middot; V 3D view &middot; Enter full screen &middot; G par ghost &middot; B race my best &middot; F flashlight &middot; U upgrades &middot; P travel pad &middot; R restart &middot; Space next level &middot; M sound &middot; H help</div>
         </div>
         <div id="srStatus" class="visually-hidden" aria-live="polite"></div>
     </div>

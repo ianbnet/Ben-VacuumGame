@@ -914,6 +914,33 @@ function drawRoomba() {
     ctx.arc(0, 0, 1.5, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
+    // the corner brush, when fitted: an arm out past the front left with a bright spinning fan
+    if (typeof hasCornerBrush === 'function' && hasCornerBrush()) {
+        ctx.save();
+        ctx.strokeStyle = '#9AA0A6';
+        ctx.lineWidth = 2;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(r - 8, -8);
+        ctx.lineTo(r + 2, -15);
+        ctx.stroke();
+        ctx.translate(r + 2, -15);
+        ctx.rotate(-roombaWheelAngle * 2.2 - chargerPulse * 0.04);
+        ctx.strokeStyle = '#F0C45A';
+        ctx.lineWidth = 1.7;
+        for (let a = 0; a < 5; a++) {
+            const ba = (a * Math.PI * 2) / 5;
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(Math.cos(ba) * 8.5, Math.sin(ba) * 8.5);
+            ctx.stroke();
+        }
+        ctx.fillStyle = '#D9A441';
+        ctx.beginPath();
+        ctx.arc(0, 0, 2.6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
     // brush rollers
     ctx.strokeStyle = '#6A6A6A';
     ctx.lineWidth = 2;
@@ -1044,6 +1071,60 @@ function drawFlashlight2D() {
 
 // Dust drawn into the intake as a tile comes clean
 const intakeSpecks = [];
+
+// A corner brush stroke: a fan of bristles flicking from the vacuum's tile into the dead end
+// and back, with a glint where it lands
+function drawBrushSweeps() {
+    for (let i = brushSweeps.length - 1; i >= 0; i--) {
+        const s = brushSweeps[i];
+        s.t += 0.045 * dtFrames;
+        if (s.t >= 1) { brushSweeps.splice(i, 1); continue; }
+        const ax = s.fromCol * TILE + TILE / 2, ay = s.fromRow * TILE + TILE / 2;
+        const dx = (s.col - s.fromCol) * TILE, dy = (s.row - s.fromRow) * TILE;
+        const reach = Math.sin(Math.min(1, s.t * 1.3) * Math.PI);
+        ctx.save();
+        ctx.globalAlpha = 0.95 * (1 - s.t * 0.5);
+        ctx.strokeStyle = '#F0C45A';
+        ctx.lineCap = 'round';
+        ctx.lineWidth = 2.2;
+        for (let b = -2; b <= 2; b++) {
+            const spread = b * 0.17 * reach;
+            ctx.beginPath();
+            ctx.moveTo(ax + dx * 0.36, ay + dy * 0.36);
+            ctx.lineTo(ax + dx * (0.36 + 0.78 * reach) - dy * spread, ay + dy * (0.36 + 0.78 * reach) + dx * spread);
+            ctx.stroke();
+        }
+        ctx.fillStyle = '#FFF3C4';
+        ctx.globalAlpha = Math.max(0, 1 - Math.abs(s.t - 0.4) * 3);
+        for (const [ox, oy, rr] of [[0, 0, 3.2], [9, -7, 1.8], [-8, 8, 1.6]]) {
+            ctx.beginPath();
+            ctx.arc(ax + dx + ox, ay + dy + oy, rr, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.restore();
+    }
+}
+
+// A short message in a pill near the top of the board
+function drawNotice() {
+    const now = typeof performance !== 'undefined' ? performance.now() : 0;
+    if (!gameNotice.text || now >= gameNotice.until) return;
+    const left = (gameNotice.until - now) / 2600;
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, Math.min(1, left * 6, (1 - left) * 10 + 0.15));
+    ctx.font = `600 13px ${UI_FONT}`;
+    const w = Math.min(CANVAS_W - 40, ctx.measureText(gameNotice.text).width + 44);
+    const x = (CANVAS_W - w) / 2, y = 64;
+    ctx.fillStyle = 'rgba(18, 26, 26, 0.9)';
+    roundRect(ctx, x, y, w, 32, 16);
+    ctx.fill();
+    ctx.strokeStyle = UI.mustard;
+    ctx.lineWidth = 1.2;
+    roundRect(ctx, x, y, w, 32, 16);
+    ctx.stroke();
+    uiText(gameNotice.text, CANVAS_W / 2, y + 21, 13, UI.cream, 'center', '600');
+    ctx.restore();
+}
 
 function drawCleanAnimations() {
     for (let i = cleanAnimations.length - 1; i >= 0; i--) {
@@ -1354,10 +1435,11 @@ function drawOverlay() {
         ctx.save();
         ctx.fillStyle = 'rgba(10, 14, 18, 0.55)';
         ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-        drawCard(cx - 250, cy - 92, 500, 184, UI.coral);
+        drawCard(cx - 250, cy - 92, 500, 208, UI.coral);
         uiText('OUT OF BATTERY', cx, cy - 36, 28, UI.coral, 'center', '500', 6);
         uiText('Get back to the dock before it runs out next time.', cx, cy + 8, 16, UI.cream, 'center', '400');
         uiText('Press R or tap Restart', cx, cy + 42, 14, 'rgba(242, 232, 213, 0.7)', 'center', '400');
+        uiText(progress.reserve ? 'The reserve cell was used up as well.' : 'Tip: switch on the Reserve cell in Upgrades for a second chance.', cx, cy + 74, 12, UI.mustard, 'center', '400');
         ctx.restore();
     }
 }

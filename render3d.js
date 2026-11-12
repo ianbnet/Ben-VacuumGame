@@ -795,6 +795,8 @@ function fpPlayerView() {
         showHud: true,
         ghost: false,
         best: typeof bestGhostPose === 'function' ? bestGhostPose() : null,
+        brush: typeof hasCornerBrush === 'function' && hasCornerBrush(),
+        pad: typeof travelPad !== 'undefined' ? travelPad : null,
         glow: design.lightRgb,
         moving: Math.abs(targetX - roomba.drawX) > 1 || Math.abs(targetY - roomba.drawY) > 1,
     };

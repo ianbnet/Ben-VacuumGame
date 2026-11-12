@@ -30,6 +30,43 @@ const UPGRADES = [
         ],
     },
     {
+        key: 'coast', group: 'Vacuum', name: 'Coasting',
+        desc: 'Rolling over floor that is already clean drains less.',
+        levels: [
+            { cost: 3, text: '25% less on clean floor' },
+            { cost: 4, text: '50% less on clean floor' },
+        ],
+    },
+    {
+        key: 'glide', group: 'Gadgets', name: 'Glide',
+        desc: 'Holding a direction runs faster over clean floor. Moves and battery stay the same.',
+        levels: [
+            { cost: 2, text: 'half as fast again' },
+            { cost: 3, text: 'twice as fast' },
+        ],
+    },
+    {
+        key: 'brush', group: 'Gadgets', name: 'Corner brush',
+        desc: 'A side brush sweeps out a dead-end tile from the tile next to it.',
+        levels: [
+            { cost: 4, text: 'fitted' },
+        ],
+    },
+    {
+        key: 'trip', group: 'Gadgets', name: 'Trip computer',
+        desc: 'Shows how many moves are left on this charge.',
+        levels: [
+            { cost: 2, text: 'fitted' },
+        ],
+    },
+    {
+        key: 'travel', group: 'Charger', name: 'Travel pad',
+        desc: 'Drop a second charging spot where the vacuum stands (P, or the Drop pad button). It can be used in one room out of every ten.',
+        levels: [
+            { cost: 6, text: 'one pad every ten rooms' },
+        ],
+    },
+    {
         key: 'pad', group: 'Charger', name: 'Charging pad',
         desc: 'The dock charges the tiles around it too.',
         levels: [
@@ -52,6 +89,9 @@ const UPGRADE_BATTERY_MAX = [100, 125, 150];
 const UPGRADE_SOLAR_PER_MOVE = [0, 0.2, 0.34];
 const UPGRADE_PAD_RADIUS = [0, 1, 2];
 const UPGRADE_OVERCHARGE = [1, 1.15, 1.3];
+const UPGRADE_COAST_MULT = [1, 0.75, 0.5];
+const UPGRADE_GLIDE_MULT = [1, 2 / 3, 0.5];
+const UPGRADE_GROUPS = ['Vacuum', 'Charger', 'Gadgets'];
 
 let upgradePanelOpen = false;
 
@@ -71,7 +111,19 @@ function batteryMax() { return UPGRADE_BATTERY_MAX[upgradeLevel('battery')]; }
 function solarPerMove() { return UPGRADE_SOLAR_PER_MOVE[upgradeLevel('solar')]; }
 function padRadius() { return UPGRADE_PAD_RADIUS[upgradeLevel('pad')]; }
 function overchargeFactor() { return UPGRADE_OVERCHARGE[upgradeLevel('overcharge')]; }
+function coastMultiplier() { return UPGRADE_COAST_MULT[upgradeLevel('coast')]; }
+function glideMultiplier() { return UPGRADE_GLIDE_MULT[upgradeLevel('glide')]; }
+function hasCornerBrush() { return upgradeLevel('brush') > 0; }
+function hasTripComputer() { return upgradeLevel('trip') > 0; }
+function hasTravelPad() { return upgradeLevel('travel') > 0; }
 function lowBatteryLevel() { return batteryMax() * 0.2; }
+
+// Trip computer: how many moves this charge pays for, counting every move at full price
+// (coasting can only make it better). Arriving on a charging tile with nothing left is fine.
+function chargeMoves() {
+    const net = moveCost() - solarPerMove();
+    return net <= 0 ? 999 : Math.floor(roomba.battery / net + 1e-9);
+}
 function isLowBattery() { return roomba.battery <= lowBatteryLevel(); }
 
 // Battery drained by one move on the current level
@@ -83,6 +135,7 @@ function moveCost() {
 function isChargingTile(col, row) {
     const ch = LEVELS[currentLevel].charger;
     if (col === ch.col && row === ch.row) return true;
+    if (typeof travelPad !== 'undefined' && travelPad && travelPad.col === col && travelPad.row === row) return true;
     if (Math.abs(col - ch.col) + Math.abs(row - ch.row) > padRadius()) return false;
     return col >= 0 && col < COLS && row >= 0 && row < ROWS && grid[row][col] !== OBSTACLE;
 }
@@ -95,6 +148,10 @@ function chargingTiles() {
         for (let col = ch.col - r; col <= ch.col + r; col++) {
             if (isChargingTile(col, row)) out.push({ col, row });
         }
+    }
+    // a travel pad dropped in this room charges too, wherever it is
+    if (typeof travelPad !== 'undefined' && travelPad && !out.some((t) => t.col === travelPad.col && t.row === travelPad.row)) {
+        out.push({ col: travelPad.col, row: travelPad.row });
     }
     return out;
 }
@@ -171,7 +228,9 @@ function buildUpgradePanel() {
     const list = document.getElementById('upgradeList');
     if (!list) return;
     list.innerHTML = '';
-    for (const group of ['Vacuum', 'Charger']) {
+    const reserve = document.getElementById('reserveToggle');
+    if (reserve) reserve.checked = !!progress.reserve;
+    for (const group of UPGRADE_GROUPS) {
         const col = document.createElement('div');
         col.className = 'upgrade-group';
         const h = document.createElement('div');
@@ -229,5 +288,8 @@ function initUpgradeUI() {
     if (close) close.addEventListener('click', () => { toggleUpgradePanel(false); close.blur(); });
     const refund = document.getElementById('btnUpgradeRefund');
     if (refund) refund.addEventListener('click', () => { refundUpgrades(); refund.blur(); });
+    // The reserve cell is a free option, not an upgrade: on or off as the player likes
+    const reserve = document.getElementById('reserveToggle');
+    if (reserve) reserve.addEventListener('change', () => { setReserveCell(reserve.checked); reserve.blur(); });
     buildUpgradePanel();
 }

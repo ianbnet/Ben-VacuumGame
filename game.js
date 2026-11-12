@@ -48,7 +48,7 @@ let bestGhost = null;     // the best recorded run in this room, replayed alongs
 
 // Saved progress (localStorage): highest level reached, best result per level, upgrade points and levels
 const SAVE_KEY = 'ben-vacuum-game.progress.v1';
-let progress = { unlocked: 0, best: {}, bestScore: 0, points: 0, upgrades: {}, runs: {}, dailyStars: {}, rooms: [], raceBest: true };
+let progress = { unlocked: 0, best: {}, bestScore: 0, points: 0, upgrades: {}, runs: {}, dailyStars: {}, rooms: [], raceBest: true, reserve: false, padRest: 0 };
 const MAX_SAVED_ROOMS = 24;
 const MAX_DAILY_RUNS = 150;
 const MAX_DAILY_STARS = 800; // days of the room of the day whose stars are remembered as paid for
@@ -78,6 +78,11 @@ const NPC_STEP_INTERVAL = 195; // ms between NPC steps (50% slower)
 // Press-and-hold state
 let heldDir = null;
 let holdTimer = null;
+let lastMoveGlides = false;   // the last move rolled over floor that was already clean
+let travelPad = null;         // { col, row } once a travel pad has been dropped in this room
+let reserveUsed = false;      // the reserve cell has already saved this room's run
+let brushSweeps = [];         // corner brush strokes still being drawn
+let gameNotice = { text: '', until: 0 };
 let lastDpadTouchAt = -Infinity;
 let keysDown = new Set();
 
@@ -150,6 +155,11 @@ function initLevel(levelIndex) {
     npcReplay.active = false;
 
     runPath = '';
+    travelPad = null;
+    reserveUsed = false;
+    brushSweeps = [];
+    lastMoveGlides = false;
+    gameNotice.until = 0;
     setupBestGhost();
     applyUpgrades();
     buildLevelSelect();
@@ -202,6 +212,8 @@ function loadProgress() {
             }
             progress.rooms = sanitizeRooms(s.rooms);
             progress.raceBest = s.raceBest !== false;
+            progress.reserve = s.reserve === true;
+            progress.padRest = Math.max(0, Math.min(PAD_EVERY - 1, s.padRest | 0));
         }
     } catch (e) {
         // Storage blocked or corrupt: play without saving
@@ -322,7 +334,7 @@ function setupBestGhost() {
     bestGhost = null;
     const run = progress.runs[roomKey()];
     if (!run || !run.path || typeof replayRun !== 'function') return;
-    const steps = replayRun(LEVELS[currentLevel], run.path);
+    const steps = replayRun(LEVELS[currentLevel], run.path, hasCornerBrush());
     if (steps.length !== run.path.length + 1) return;
     bestGhost = {
         steps,
@@ -482,6 +494,7 @@ function tryMove(dc, dr) {
     if (newCol < 0 || newCol >= COLS || newRow < 0 || newRow >= ROWS || grid[newRow][newCol] === OBSTACLE) {
         bumpFlash = 10;
         sound('bump');
+        lastMoveGlides = false;
         return false;
     }
 
@@ -495,15 +508,30 @@ function tryMove(dc, dr) {
     const max = batteryMax();
     const low = lowBatteryLevel();
     const batteryBefore = roomba.battery;
-    roomba.battery = Math.max(0, roomba.battery - moveCost());
+    // Coasting: floor that is already clean costs less to cross
+    const wasDirty = grid[newRow][newCol] === DIRTY;
+    lastMoveGlides = !wasDirty;
+    roomba.battery = Math.max(0, roomba.battery - moveCost() * (wasDirty ? 1 : coastMultiplier()));
 
-    if (grid[newRow][newCol] === DIRTY) {
+    if (wasDirty) {
         grid[newRow][newCol] = CLEAN;
         cleaned++;
         score += 10;
         cleanAnimations.push({ col: newCol, row: newRow, progress: 0 });
         tileCleanFade[`${newCol},${newRow}`] = 0; // start fade-in
         sound('clean');
+    }
+    // Corner brush: sweep out any dead-end tile beside this one without driving into it
+    if (hasCornerBrush()) {
+        for (const t of cornerBrushTargets(grid, newCol, newRow)) {
+            grid[t.row][t.col] = CLEAN;
+            cleaned++;
+            score += 10;
+            cleanAnimations.push({ col: t.col, row: t.row, progress: 0 });
+            tileCleanFade[`${t.col},${t.row}`] = 0;
+            brushSweeps.push({ fromCol: newCol, fromRow: newRow, col: t.col, row: t.row, t: 0 });
+            sound('clean');
+        }
     }
 
     if (isChargingTile(newCol, newRow)) {
@@ -522,9 +550,17 @@ function tryMove(dc, dr) {
     if (cleaned >= totalDirty) {
         completeLevel();
     } else if (roomba.battery < 0.01) {
-        gameState = 'GAME_OVER';
-        stopHold();
-        sound('gameOver');
+        if (progress.reserve && !reserveUsed) {
+            // The reserve cell, when the player has it switched on: a few more moves, once a room
+            reserveUsed = true;
+            roomba.battery = RESERVE_MOVES * moveCost();
+            showNotice(`Reserve cell  ·  ${RESERVE_MOVES} moves to get home`);
+            sound('lowBattery');
+        } else {
+            gameState = 'GAME_OVER';
+            stopHold();
+            sound('gameOver');
+        }
     }
 
     updateUI();
@@ -559,6 +595,11 @@ function completeLevel() {
         progress.dailyStars[dailyKey] = stars;
         progress.dailyStars = sanitizeDailyStars(progress.dailyStars);
     }
+    // The travel pad is good for one room in every PAD_EVERY. A room finished with the pad down
+    // spends it; each other house room or room of the day finished brings it one room closer.
+    // A room restarted or lost with the pad down does not spend it.
+    if (travelPad) progress.padRest = PAD_EVERY - 1;
+    else if ((house || daily) && progress.padRest > 0) progress.padRest--;
     const key = roomKey();
     const prevRun = progress.runs[key];
     const newBest = saveRun(key, { moves, stars }, runPath);
@@ -624,7 +665,8 @@ function startHold(dir, delay) {
     const repeat = () => {
         if (heldDir !== dir) return;
         handleDirection(dir);
-        holdTimer = setTimeout(repeat, interval);
+        // Glide: the next step comes sooner when this one rolled over clean floor
+        holdTimer = setTimeout(repeat, Math.round(interval * (lastMoveGlides ? glideMultiplier() : 1)));
     };
     holdTimer = setTimeout(repeat, Math.max(interval, delay === undefined ? HOLD_DELAY_KEYS : delay));
 }
@@ -695,6 +737,57 @@ function restartLevel() {
 function toggleHelp() {
     helpVisible = !helpVisible;
     stopHold();
+}
+
+// A short message over the board: the reserve cell cutting in, a travel pad going down
+function showNotice(text) {
+    gameNotice.text = text;
+    gameNotice.until = (typeof performance !== 'undefined' ? performance.now() : 0) + 2600;
+}
+
+// The reserve cell option
+function setReserveCell(on) {
+    progress.reserve = !!on;
+    saveProgress();
+}
+
+// --- Travel pad ---------------------------------------------------------------------------
+
+// 'none' not fitted, 'down' already dropped in this room, 'resting' waiting out its rooms,
+// 'here' standing on a tile that already charges, 'ready'
+function travelPadState() {
+    if (!hasTravelPad()) return 'none';
+    if (travelPad) return 'down';
+    if ((progress.padRest | 0) > 0) return 'resting';
+    if (grid.length && isChargingTile(roomba.col, roomba.row)) return 'here';
+    return 'ready';
+}
+
+// Drop the pad on the vacuum's tile: it charges now, and that tile charges for the rest of the room
+function dropTravelPad() {
+    if (gameState !== 'PLAYING' || helpVisible || travelPadState() !== 'ready') return false;
+    travelPad = { col: roomba.col, row: roomba.row };
+    roomba.battery = Math.max(roomba.battery, batteryMax());
+    applyUpgrades(); // which tiles charge, and how far home is, now count the pad
+    showNotice('Travel pad down  ·  it charges here for the rest of this room');
+    sound('dock');
+    updateUI();
+    return true;
+}
+
+// The Drop pad button: hidden until the pad is fitted, and it says why when it cannot be used
+function syncPadButton() {
+    if (typeof document === 'undefined') return;
+    const btn = document.getElementById('btnPad');
+    if (!btn) return;
+    const state = travelPadState();
+    btn.hidden = state === 'none';
+    if (state === 'none') return;
+    const rest = progress.padRest | 0;
+    btn.disabled = state !== 'ready' || gameState !== 'PLAYING';
+    btn.textContent = state === 'down' ? 'Pad is down' : state === 'resting' ? `Pad in ${rest} room${rest === 1 ? '' : 's'}` : 'Drop pad';
+    btn.title = state === 'resting' ? `The travel pad is ready again after ${rest} more room${rest === 1 ? '' : 's'}`
+        : state === 'here' ? 'This tile already charges' : state === 'down' ? 'The pad is down for this room' : 'Drop the travel pad here (P)';
 }
 
 // The credits: a panel under the controls, opened by its button
@@ -903,6 +996,10 @@ document.addEventListener('keydown', (e) => {
     }
 
     // B: race the ghost of your best run, on / off
+    if (e.key === 'p' || e.key === 'P') {
+        dropTravelPad();
+        return;
+    }
     if (e.key === 'b' || e.key === 'B') {
         toggleRaceBest();
         return;
@@ -1109,6 +1206,20 @@ function updateUI() {
         elDockDist.classList.toggle('warn', dockDist > 0 && roomba.battery <= (dockDist + 2) * moveCost());
     }
 
+    // Trip computer, when fitted: how many moves this charge still pays for
+    const elTrip = document.getElementById('tripStat');
+    if (elTrip) {
+        const fitted = hasTripComputer();
+        elTrip.hidden = !fitted;
+        const elMoves = document.getElementById('tripMoves');
+        if (fitted && elMoves) {
+            const n = chargeMoves();
+            elMoves.textContent = `${n} move${n === 1 ? '' : 's'}`;
+            elMoves.classList.toggle('warn', dockDist > 0 && n < dockDist + 2);
+        }
+    }
+    syncPadButton();
+
     // Screen-reader status: every ten tiles, and on every state change
     if (elSrStatus && (cleaned % 10 === 0 || gameState !== 'PLAYING')) {
         const state = gameState === 'LEVEL_COMPLETE' ? 'Level complete. ' : gameState === 'GAME_OVER' ? 'Out of battery. ' : '';
@@ -1170,6 +1281,7 @@ function renderFrame(timestamp = performance.now()) {
     } else {
         drawScene(grid, tileCleanFade);
         drawCleanAnimations();
+        drawBrushSweeps();
         drawLighting();
         drawDustMotes();
         drawBokeh();
@@ -1183,7 +1295,9 @@ function renderFrame(timestamp = performance.now()) {
     // Dive into, or climb out of, the first-person view
     if (typeof fpDrawDive === 'function') fpDrawDive();
 
+    if (viewMode === 'FP' && brushSweeps.length) brushSweeps = []; // drawn on the 2D board only
     drawBanner();
+    drawNotice();
     if (helpVisible) drawHelp();
 
     if (bumpFlash > 0) bumpFlash = Math.max(0, bumpFlash - dtFrames);
@@ -1264,6 +1378,8 @@ document.addEventListener('DOMContentLoaded', () => {
             elBtnGhost.blur();
         });
     }
+    const elBtnPad = document.getElementById('btnPad');
+    if (elBtnPad) elBtnPad.addEventListener('click', () => { dropTravelPad(); elBtnPad.blur(); });
     const elBtnCredits = document.getElementById('btnCredits');
     if (elBtnCredits) elBtnCredits.addEventListener('click', () => { toggleCreditsPanel(); elBtnCredits.blur(); });
     const elBtnCreditsClose = document.getElementById('btnCreditsClose');

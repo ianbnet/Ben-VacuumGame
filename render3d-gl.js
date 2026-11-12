@@ -986,10 +986,27 @@ function buildVacuumBody() {
     const lensMat = new THREE.MeshPhysicalMaterial({ color: '#FFE2A8', emissive: '#FFE2A8', emissiveIntensity: 0, roughness: 0.2, clearcoat: 1 });
     const lens = new THREE.Mesh(new THREE.SphereGeometry(0.012, 12, 8), lensMat);
     lens.position.set(0, -0.09, 0.235);
-    body.add(hood, rim, ring, lens);
+    // The corner brush, shown when that upgrade is fitted: a hub out past the bumper with a
+    // fan of bristles that spins as the vacuum drives
+    const brush = new THREE.Group();
+    const brass = new THREE.MeshPhysicalMaterial({ color: '#D9A441', metalness: 1, roughness: 0.3 });
+    const bristle = new THREE.MeshPhysicalMaterial({ color: '#F4D98C', roughness: 0.8 });
+    brush.add(new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.03, 12), brass));
+    for (let i = 0; i < 5; i++) {
+        const b = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.008, 0.016), bristle);
+        const a = (i / 5) * Math.PI * 2;
+        b.position.set(Math.cos(a) * 0.075, -0.012, Math.sin(a) * 0.075);
+        b.rotation.y = -a;
+        brush.add(b);
+    }
+    // just ahead of the bumper and left of centre, where the low camera can see it
+    brush.position.set(0.13, -0.082, 0.4);
+    brush.scale.set(1.5, 1.5, 1.5);
+    brush.visible = false;
+    body.add(hood, rim, ring, lens, brush);
     body.rotation.y = Math.PI; // the arc opens towards the viewer; flip so it curves away ahead
-    body.userData = { ringMat, lensMat };
-    for (const m of body.children) { m.castShadow = false; m.receiveShadow = false; m.frustumCulled = false; }
+    body.userData = { ringMat, lensMat, brush };
+    body.traverse((m) => { m.castShadow = false; m.receiveShadow = false; m.frustumCulled = false; });
     return body;
 }
 
@@ -1044,6 +1061,24 @@ function buildScene(levelIndex) {
     for (const item of s3Furniture(levelIndex)) scene.add(buildGroup(item, theme));
     const dock = s3Dock(levelIndex);
     scene.add(buildGroup(dock, theme));
+    // The travel pad: hidden until the player drops one
+    {
+        const group = new THREE.Group();
+        const plate = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.44, 0.03, 40), new THREE.MeshPhysicalMaterial({ color: '#1B2430', metalness: 0.6, roughness: 0.35, clearcoat: 0.6 }));
+        plate.position.y = 0.015;
+        plate.receiveShadow = true;
+        const edge = new THREE.Mesh(new THREE.TorusGeometry(0.43, 0.012, 8, 48), new THREE.MeshPhysicalMaterial({ color: '#D9A441', metalness: 1, roughness: 0.3 }));
+        edge.rotation.x = Math.PI / 2;
+        edge.position.y = 0.03;
+        const glowMat = new THREE.MeshPhysicalMaterial({ color: '#4FA8FF', emissive: '#4FA8FF', emissiveIntensity: 1.5, roughness: 0.4 });
+        const ringLight = new THREE.Mesh(new THREE.TorusGeometry(0.27, 0.014, 8, 48), glowMat);
+        ringLight.rotation.x = Math.PI / 2;
+        ringLight.position.y = 0.034;
+        group.add(plate, edge, ringLight);
+        group.visible = false;
+        scene.add(group);
+        G.pad = { group, glow: glowMat };
+    }
 
     // Outside: ground, backdrop with the skyline, and a sun that comes in through the window
     const ground = new THREE.Mesh(new THREE.PlaneGeometry(120, 120), new THREE.MeshStandardMaterial({ color: theme.sky.ground, roughness: 1 }));
@@ -1444,6 +1479,19 @@ function render(view, dtMs, fly) {
     G.lights.vac.intensity = view.ghost ? 0.5 : 0.35;
     G.body.userData.ringMat.color.copy(glow);
     G.body.userData.ringMat.emissive.copy(glow);
+    const cornerBrush = G.body.userData.brush;
+    if (cornerBrush) {
+        cornerBrush.visible = !!view.brush;
+        if (cornerBrush.visible) cornerBrush.rotation.y += dt * (view.moving ? 16 : 2.5);
+    }
+    // The travel pad sits wherever the player dropped it in this room
+    if (G.pad) {
+        G.pad.group.visible = !!view.pad;
+        if (view.pad) {
+            G.pad.group.position.set(view.pad.col + 0.5, 0, view.pad.row + 0.5);
+            G.pad.glow.emissiveIntensity = 1.3 + 0.5 * Math.sin(G.time * 2.4);
+        }
+    }
     const flashOn = !view.ghost && design.flashOn;
     const flash = G.lights.flash;
     flash.intensity = flashOn ? 3.2 : 0;

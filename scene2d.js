@@ -706,6 +706,7 @@ function drawScene(g, fades) {
     ctx.drawImage(scene.floor, 0, 0, CANVAS_W, CANVAS_H);
     drawTileStates(g, fades);
     drawChargingPad();
+    drawTravelPad();
     const lv = LEVELS[currentLevel];
     drawChargerTile(lv.charger.col * TILE, lv.charger.row * TILE);
     ctx.drawImage(scene.furniture, 0, 0, CANVAS_W, CANVAS_H);
@@ -777,6 +778,37 @@ function drawGlossReflections(cleanPath) {
 }
 
 // Tiles that charge the vacuum thanks to the charging pad upgrade: the dock's blue, pulsing
+// The travel pad where the player dropped it: a dark mat with a brass edge, a ring of light
+// and a bolt in the middle
+function drawTravelPad() {
+    if (typeof travelPad === 'undefined' || !travelPad) return;
+    const pulse = 0.5 + 0.5 * Math.sin(chargerPulse * 0.06);
+    const h = TILE * 0.42;
+    ctx.save();
+    ctx.translate(travelPad.col * TILE + TILE / 2, travelPad.row * TILE + TILE / 2);
+    ctx.fillStyle = 'rgba(20, 28, 36, 0.9)';
+    roundRect(ctx, -h, -h, h * 2, h * 2, 9);
+    ctx.fill();
+    ctx.strokeStyle = '#D9A441';
+    ctx.lineWidth = 2;
+    roundRect(ctx, -h, -h, h * 2, h * 2, 9);
+    ctx.stroke();
+    ctx.shadowColor = '#4FA8FF';
+    ctx.shadowBlur = 8 + 6 * pulse;
+    ctx.strokeStyle = `rgba(120, 190, 255, ${0.65 + 0.3 * pulse})`;
+    ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    ctx.arc(0, 0, TILE * 0.25, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#F2E8D5';
+    ctx.beginPath();
+    ctx.moveTo(2, -8); ctx.lineTo(-5, 1); ctx.lineTo(-0.5, 1); ctx.lineTo(-2, 8); ctx.lineTo(5, -1); ctx.lineTo(0.5, -1);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+}
+
 function drawChargingPad() {
     if (!chargingPadGrid || padRadius() === 0) return;
     const lv = LEVELS[currentLevel];

@@ -629,6 +629,152 @@ section('Taps and held moves');
     G('stopHold(); showHouse()');
 }
 
+// --- More upgrades, and the reserve cell ---------------------------------------------
+
+section('More upgrades, and the reserve cell');
+{
+    const fit = (levels) => G(`progress.upgrades = sanitizeUpgrades(${JSON.stringify(levels)}); applyUpgrades()`);
+    const fresh = (lv) => G(`stopHold(); showHouse(); progress.unlocked = HOUSE_LEVELS - 1; selectLevel(${lv}); viewMode = "TD"`);
+    const up = (n) => { for (let i = 0; i < n; i++) G('tryMove(0, -1)'); };
+    const down = (n) => { for (let i = 0; i < n; i++) G('tryMove(0, 1)'); };
+    G('progress.reserve = false; progress.padRest = 0');
+
+    const defs = G('UPGRADES');
+    check(defs.length === 10 && new Set(defs.map((u) => u.key)).size === 10 && defs.every((u) => G('UPGRADE_GROUPS').includes(u.group)), 'ten upgrades, each with its own key, each in a group the panel shows');
+    check(defs.reduce((n, u) => n + u.levels.reduce((m, l) => m + l.cost, 0), 0) === 53, 'everything together costs 53 points');
+
+    // Coasting: clean floor costs less to cross (the living room drains one a move)
+    const coastAfter = (level) => { fit({ coast: level }); fresh(0); up(2); down(1); return G('roomba.battery'); };
+    check(coastAfter(0) === 97 && coastAfter(1) === 97.25 && coastAfter(2) === 97.5, 'coasting takes a quarter, then a half, off a move over clean floor');
+    fit({ coast: 2 }); fresh(0); up(3);
+    check(G('roomba.battery') === 97, 'and nothing off a move that cleans a tile');
+
+    // Trip computer
+    fit({}); fresh(0);
+    check(G('hasTripComputer()') === false && G('chargeMoves()') === 100, 'a full charge in the living room pays for a hundred moves');
+    fresh(29);
+    const full30 = G('chargeMoves()');
+    up(1);
+    check(full30 === 25 && G('chargeMoves()') === 24, 'in room 30 a full charge pays for 25 moves, and one move leaves 24');
+    fit({ trip: 1, motor: 3, solar: 2 }); fresh(29);
+    check(G('hasTripComputer()') === true && G('chargeMoves()') === Math.floor(100 / (4 * 0.55 - 0.34) + 1e-9), 'the count allows for the motor and the solar cells');
+
+    // Corner brush
+    G(`__nook = buildLevelGrid({ charger: { col: 0, row: 5 }, obstacles: [{ type: 'wall', col: 2, row: 0, w: 1, h: 1 }, { type: 'wall', col: 4, row: 0, w: 1, h: 1 }] })`);
+    check(G('JSON.stringify(cornerBrushTargets(__nook, 3, 1))') === '[{"col":3,"row":0}]', 'a dirty tile with no way in but this one is a dead end the brush reaches');
+    check(G('cornerBrushTargets(__nook, 3, 2).length') === 0 && G('cornerBrushTargets(__nook, 1, 1).length') === 0, 'ordinary neighbours and tiles two away are left alone');
+    G('__nook[0][3] = CLEAN');
+    check(G('cornerBrushTargets(__nook, 3, 1).length') === 0, 'a dead end that is already clean is not swept again');
+    // The banquet hall is full of dead ends between its chairs; its dock is at 4,5 and the tile
+    // at 2,4 can only be entered from 2,5
+    fit({}); fresh(26);
+    G('tryMove(-1, 0); tryMove(-1, 0)');
+    check(G('cleaned') === 2 && G('brushSweeps.length') === 0 && G('grid[4][2]') === DIRTY, 'without the brush, driving past a dead end leaves it dirty');
+    fit({ brush: 1 }); fresh(26);
+    G('tryMove(-1, 0); tryMove(-1, 0)');
+    check(G('cleaned') === 3 && G('brushSweeps.length') === 1 && G('grid[4][2]') === CLEAN && G('score') === 30 && G('moves') === 2, 'with it, the dead end beside the vacuum is swept: it counts and scores like any other tile, and leaves a stroke to draw');
+    check(G('JSON.stringify(brushSweeps[0])') === '{"fromCol":2,"fromRow":5,"col":2,"row":4,"t":0}', 'the stroke runs from the vacuum\'s tile into the dead end');
+    fresh(26);
+    check(G(drivePar) === 'LEVEL_COMPLETE' && G('cleaned') === G('totalDirty') && G('moves') <= G('parMoves'), 'the room still finishes cleanly with the brush fitted');
+    const path26 = G('runPath');
+    const without = G(`replayRun(LEVELS[26], ${JSON.stringify(path26)})`), withBrush = G(`replayRun(LEVELS[26], ${JSON.stringify(path26)}, true)`);
+    check(without.length === withBrush.length && withBrush.every((st, i) => st.cleaned >= without[i].cleaned) && withBrush.some((st, i) => st.cleaned > without[i].cleaned) && withBrush[withBrush.length - 1].cleaned === G('totalDirty'), 'a saved run replayed with the brush fitted sweeps the dead ends too, so the ghost compares like with like');
+
+    // Glide: only the pace of a held direction changes, and only over clean floor
+    {
+        const clock = { now: 0, list: [], id: 0 };
+        const real = { st: sandbox.setTimeout, ct: sandbox.clearTimeout };
+        sandbox.setTimeout = (fn, ms) => { clock.list.push({ id: ++clock.id, at: clock.now + ms, fn }); return clock.id; };
+        sandbox.clearTimeout = (id) => { clock.list = clock.list.filter((t) => t.id !== id); };
+        const wait = (ms) => {
+            const end = clock.now + ms;
+            for (;;) {
+                const due = clock.list.filter((t) => t.at <= end).sort((a, b) => a.at - b.at)[0];
+                if (!due) break;
+                clock.now = due.at;
+                clock.list = clock.list.filter((t) => t !== due);
+                due.fn();
+            }
+            clock.now = end;
+        };
+        const TOUCH = G('HOLD_DELAY_TOUCH'), STEP = G('MOVE_INTERVAL');
+        const heldOverClean = (level) => {
+            fit({ glide: level }); fresh(0); clock.list = [];
+            up(6); down(6);                       // six clean tiles above the dock, vacuum back home
+            const m0 = G('moves'), b0 = G('roomba.battery');
+            G('startHold("up", HOLD_DELAY_TOUCH)');
+            wait(TOUCH + STEP * 2);
+            G('stopHold()');
+            return { moves: G('moves') - m0, drained: b0 - G('roomba.battery') };
+        };
+        const g0 = heldOverClean(0), g1 = heldOverClean(1), g2 = heldOverClean(2);
+        check(g0.moves === 4 && g1.moves === 5 && g2.moves === 6, `held over clean floor for the same time, glide covers more tiles (${g0.moves}, ${g1.moves}, ${g2.moves})`);
+        check(g2.drained === g2.moves, 'and every one of those moves still costs what a move costs');
+        fit({ glide: 2 }); fresh(0); clock.list = [];
+        const d0 = G('moves');
+        G('startHold("up", HOLD_DELAY_TOUCH)');
+        wait(TOUCH + STEP * 2);
+        G('stopHold()');
+        check(G('moves') - d0 === 4, 'over dirty floor glide changes nothing');
+        Object.assign(sandbox, { setTimeout: real.st, clearTimeout: real.ct });
+    }
+
+    // The reserve cell: an option, not an upgrade
+    fit({}); fresh(0);
+    G('progress.reserve = false; roomba.battery = 1; tryMove(0, -1)');
+    check(G('gameState') === 'GAME_OVER', 'with the reserve cell off, an empty battery ends the run');
+    fresh(0);
+    G('setReserveCell(true); roomba.battery = 1; tryMove(0, -1)');
+    check(G('gameState') === 'PLAYING' && G('roomba.battery') === G('RESERVE_MOVES') && G('reserveUsed') === true && /Reserve cell/.test(G('gameNotice.text')), 'switched on, it gives six more moves and says so');
+    G('roomba.battery = 1; tryMove(0, -1)');
+    check(G('gameState') === 'GAME_OVER', 'but only once in a room');
+    G('restartLevel()');
+    check(G('reserveUsed') === false && G('progress.reserve') === true, 'the next try at the room has its reserve back');
+    fresh(29);
+    G('roomba.battery = 4; tryMove(0, -1)');
+    check(G('roomba.battery') === 24, 'in room 30 the reserve is still six moves, at four a move');
+    G('setReserveCell(false)');
+
+    // The travel pad: one room in every ten
+    fit({}); fresh(0);
+    check(G('travelPadState()') === 'none' && G('dropTravelPad()') === false, 'no pad until the upgrade is bought');
+    fit({ travel: 1 }); fresh(0);
+    check(G('travelPadState()') === 'here' && G('dropTravelPad()') === false, 'it cannot be dropped on a tile that already charges');
+    up(3);
+    check(G('travelPadState()') === 'ready' && G('roomba.battery') === 97, 'away from the dock it is ready');
+    check(G('dropTravelPad()') === true && G('JSON.stringify(travelPad)') === '{"col":14,"row":8}' && G('roomba.battery') === 100 && G('isChargingTile(14, 8)') && G('chargerDistGrid[8][14]') === 0, 'dropping it charges the vacuum there and makes that tile a place to charge');
+    check(G('travelPadState()') === 'down' && G('dropTravelPad()') === false, 'one pad a room');
+    up(3);
+    const awayDist = G('chargerDistGrid[roomba.row][roomba.col]'), awayBattery = G('roomba.battery');
+    down(3);
+    check(awayDist === 3 && awayBattery === 97 && G('roomba.battery') === 100, 'home is now as near as the pad, and driving back onto it charges again');
+    G('restartLevel()');
+    check(G('travelPad') === null && G('progress.padRest') === 0 && G('travelPadState()') === 'here', 'restarting the room picks the pad back up without spending it');
+    up(2); G('dropTravelPad()'); down(2);
+    check(G(drivePar) === 'LEVEL_COMPLETE' && G('progress.padRest') === G('PAD_EVERY') - 1, 'finishing a room with the pad down spends it for the next nine rooms');
+    fresh(1);
+    up(1);
+    check(G('travelPadState()') === 'resting' && G('dropTravelPad()') === false, 'while it rests it cannot be dropped');
+    down(1);
+    check(G(drivePar) === 'LEVEL_COMPLETE' && G('progress.padRest') === G('PAD_EVERY') - 2, 'each room finished without it brings it one room closer');
+    G('progress.padRest = 1'); fresh(2);
+    G(drivePar);
+    fresh(3); G('tryMove(-1, 0); tryMove(0, 1)');
+    check(G('progress.padRest') === 0 && G('travelPadState()') === 'ready', 'and after the ninth it is ready again');
+
+    // Saved with the rest of the progress
+    G(`localStorage.setItem(SAVE_KEY, JSON.stringify({ reserve: true, padRest: 99, upgrades: { travel: 5, glide: 2, nonsense: 3 } })); loadProgress()`);
+    check(G('progress.reserve') === true && G('progress.padRest') === 9 && G('progress.upgrades.travel') === 1 && G('progress.upgrades.glide') === 2 && G('progress.upgrades.nonsense') === undefined, 'the option, the pad\'s rest and the new upgrade levels are saved and tidied on load');
+    G(`localStorage.setItem(SAVE_KEY, JSON.stringify({ unlocked: 2 })); loadProgress()`);
+    check(G('progress.reserve') === false && G('progress.padRest') === 0, 'a save from before them starts with the reserve off and the pad ready');
+    const page2 = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+    check(/id="tripStat"/.test(page2) && /id="btnPad"/.test(page2) && /id="reserveToggle"/.test(page2), 'the page has the trip readout, the Drop pad button and the reserve switch');
+
+    G('localStorage.removeItem(SAVE_KEY); progress.unlocked = 0; progress.best = {}; progress.points = 0; progress.runs = {}; progress.dailyStars = {}; progress.reserve = false; progress.padRest = 0');
+    fit({});
+    G('showHouse()');
+}
+
 // --- The rest of the house -------------------------------------------------------
 
 section('Thirty rooms on five floors');

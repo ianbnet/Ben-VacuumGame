@@ -689,6 +689,29 @@ body {
     color: var(--cream);
 }
 
+.upgrade-option {
+    align-self: center;
+    max-width: 560px;
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--cream-dim);
+    text-align: left;
+}
+
+.upgrade-option strong {
+    color: var(--cream);
+    font-weight: 600;
+}
+
+#btnPad[hidden] {
+    display: none;
+}
+
+#btnPad:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
+
 .upgrade-hint {
     font-size: 12px;
     color: var(--cream-dim);

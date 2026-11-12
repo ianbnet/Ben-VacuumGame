@@ -32,12 +32,36 @@ Then open http://localhost:3000. Any static file server works (`npm start` runs 
 | Space | Next level once a level is complete; ends the ghost replay. |
 | G | Watch the ghost run the par route, at any time. Press V during it to ride along in 3D; Space or G ends it. |
 | B | Race my best on / off: the gold ghost of your best run in this room. |
+| P | Drop the travel pad, once that upgrade is fitted and ready. |
 | U | Upgrades panel. Every new star on a house room or a room of the day is a point to spend on the vacuum or the charger. |
 | M | Mute / unmute. |
 | Design button | Colour wheels for the vacuum's lights and its flashlight. |
 | H or ? | Help. |
 
 The on-screen d-pad, level buttons and panel buttons do the same things and work on phones.
+
+## Upgrades
+
+Points buy ten upgrades in three groups. Par is always worked out with none of them.
+
+| Group | Upgrade | What it does |
+|---|---|---|
+| Vacuum | Efficient motor | Each move drains less. |
+| Vacuum | Bigger battery | A larger cell. |
+| Vacuum | Solar cells | Trickle-charges as it moves. |
+| Vacuum | Coasting | Rolling over floor that is already clean drains less. |
+| Charger | Charging pad | The dock charges the tiles around it too. |
+| Charger | Overcharge | Leave the dock with more than a full charge. |
+| Charger | Travel pad | Drop a second charging spot where the vacuum stands. One room in every ten. |
+| Gadgets | Glide | Holding a direction runs faster over clean floor. Moves and battery are unchanged. |
+| Gadgets | Corner brush | Sweeps out a dead-end tile from the tile next to it. |
+| Gadgets | Trip computer | Shows how many moves are left on this charge. |
+
+The travel pad is spent by finishing a room with it down, then rests for nine more finished rooms
+(house rooms or rooms of the day). Restarting or losing a room gives it back.
+
+The **Reserve cell** is not an upgrade. It is a free switch in the Upgrades panel: when on, the
+first time the battery runs out in a room the vacuum gets six more moves.
 
 ## Ways to play
 

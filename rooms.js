@@ -386,7 +386,7 @@ function rollRoom(rnd, day) {
 // Replay a recorded run (a string of U, D, L and R moves from the dock) on a room: where the
 // vacuum stood after each move, which way it faced, and how many tiles were clean by then.
 // Entry 0 is the dock before any move. Stops at the first move the room does not allow.
-function replayRun(room, path) {
+function replayRun(room, path, cornerBrush) {
     const g = buildLevelGrid(room);
     let col = room.charger.col, row = room.charger.row, cleanedSoFar = 0;
     const steps = [{ col, row, dir: 'up', cleaned: 0 }];
@@ -402,6 +402,13 @@ function replayRun(room, path) {
         if (g[row][col] === DIRTY) {
             g[row][col] = CLEAN;
             cleanedSoFar++;
+        }
+        // with a corner brush fitted, the run sweeps out dead ends as the vacuum does now
+        if (cornerBrush) {
+            for (const t of cornerBrushTargets(g, col, row)) {
+                g[t.row][t.col] = CLEAN;
+                cleanedSoFar++;
+            }
         }
         steps.push({ col, row, dir, cleaned: cleanedSoFar });
     }
