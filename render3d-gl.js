@@ -199,6 +199,11 @@ function paintFloorCanvas(theme) {
         pack.paintFloor(t, theme, px);
         return c;
     }
+    if (theme.floor === 'paper') {
+        // a painted room: only the paper, for the floor's tooth. The painting is laid over it.
+        paintPaper(t, c.width, c.height, theme.floorSeed);
+        return c;
+    }
     if (theme.floor === 'lino') {
         const a = '#EAF1EC', b = '#8ED1C0';
         for (let r = 0; r < ROWS * 2; r++) {
@@ -265,6 +270,38 @@ function paintDustAtlas() {
         t.drawImage(tile, (v % 4) * n, Math.floor(v / 4) * n);
     }
     return c;
+}
+
+// The pencil hatching of a painted room, laid out as the dust is: one mark to a tile
+function paintPencilAtlas() {
+    const n = 128;
+    const c = makeCanvas(n * 4, n * 4);
+    const t = c.getContext('2d');
+    const tile = makeCanvas(n, n);
+    const tt = tile.getContext('2d');
+    for (let v = 0; v < 16; v++) {
+        tt.clearRect(0, 0, n, n);
+        paintPencilMark(tt, n, v, 2.2);
+        t.drawImage(tile, (v % 4) * n, Math.floor(v / 4) * n);
+    }
+    return c;
+}
+
+// The floor of a painted room is the painting itself: the canvas paint.js keeps, taken
+// again each time the paint moves. Not cached: a fresh sheet may bring another canvas.
+function paintTexture(picture) {
+    const t = new THREE.CanvasTexture(picture);
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.anisotropy = Math.min(8, G.renderer.capabilities.getMaxAnisotropy());
+    if (typeof DESIGN_ON_PHONE !== 'undefined' && DESIGN_ON_PHONE) {
+        // a phone should not rebuild the smaller copies of the picture every frame
+        t.generateMipmaps = false;
+        t.minFilter = THREE.LinearFilter;
+    }
+    t.needsUpdate = true;
+    G.paintTex = t;
+    G.paintSeen = -1;
+    return t;
 }
 
 function paintPlasterNormal() {
@@ -650,6 +687,8 @@ function buildTileTexture() {
 function updateTiles(view) {
     const g = view.grid;
     const pads = typeof chargingPadGrid !== 'undefined' ? chargingPadGrid : null;
+    // how shiny a done tile and a waiting tile are; a style can say (theme.floorMat.rough)
+    const rough = (G.theme && G.theme.floorMat && G.theme.floorMat.rough) || [70, 235];
     let changed = false;
     for (let r = 0; r < ROWS; r++) {
         for (let c = 0; c < COLS; c++) {
@@ -663,7 +702,7 @@ function updateTiles(view) {
             const o = ((ROWS - 1 - r) * COLS + c) * 4;
             const clean = cell === CLEAN || cell === CHARGER;
             G.tileData[o] = clean ? 255 : 0;
-            G.tileData[o + 1] = cell === CHARGER ? 90 : clean ? 70 : 235;
+            G.tileData[o + 1] = cell === CHARGER ? 90 : clean ? rough[0] : rough[1];
             G.tileData[o + 2] = pad ? 255 : 0;
             G.tileData[o + 3] = 255;
             setDebrisForTile(c, r, cell === DIRTY);
@@ -827,7 +866,7 @@ function updateIntake(view, dt) {
     if (fades) {
         for (const key in fades) {
             now.add(key);
-            if (!I.seen.has(key)) {
+            if (!I.seen.has(key) && !(G.theme && G.theme.paint)) { // a brush draws nothing in
                 const [c, r] = key.split(',').map(Number);
                 spawnIntake(c, r);
             }
@@ -888,11 +927,15 @@ function updateSaucer() {
 
 function buildFloor(theme) {
     // A style can say how its floor behaves: theme.floorMat = { bump, normal, metalness,
-    // clearcoat, reflect, dust: [keep, r, g, b] }
+    // clearcoat, reflect, rough: [done, waiting], dust: [keep, r, g, b], marks: 'pencil' }
     const fm = theme.floorMat || {};
-    const map = getTexture('floor:' + theme.name, () => paintFloorCanvas(theme));
+    const picture = theme.paint && typeof paintPicture === 'function' ? paintPicture() : null;
+    if (G.paintTex) { G.paintTex.dispose(); G.paintTex = null; }
+    const map = picture ? paintTexture(picture) : getTexture('floor:' + theme.name, () => paintFloorCanvas(theme));
     const normal = getTexture('floorN:' + theme.name, () => normalFromHeight(paintFloorCanvas(theme), fm.bump || (theme.floor === 'wood' ? 0.6 : 0.3)), { srgb: false });
-    const dust = getTexture('dust', paintDustAtlas, { repeat: [COLS / 4, ROWS / 4] });
+    const dust = fm.marks === 'pencil'
+        ? getTexture('marks:pencil', paintPencilAtlas, { repeat: [COLS / 4, ROWS / 4] })
+        : getTexture('dust', paintDustAtlas, { repeat: [COLS / 4, ROWS / 4] });
     const nk = fm.normal === undefined ? 0.45 : fm.normal;
     const mat = new THREE.MeshPhysicalMaterial({
         map, normalMap: normal, normalScale: new THREE.Vector2(nk, nk),
@@ -1045,6 +1088,7 @@ function disposeScene() {
     G.scene.traverse((o) => { if (o.isMesh) o.geometry.dispose(); });
     for (const m of G.materials.values()) m.dispose();
     G.materials.clear();
+    if (G.paintTex) { G.paintTex.dispose(); G.paintTex = null; }
     G.tagged = {};
     G.scene = null;
 }
@@ -1197,7 +1241,9 @@ function buildScene(levelIndex) {
 
     // Crumbs on the dirty tiles and the saucer are solid; the beam, motes and intake dust are
     // translucent effects that live in their own scene so the AO and focus passes ignore them
-    scene.add(buildDebris(theme));
+    const debris = buildDebris(theme);
+    debris.visible = !theme.paint; // paper waiting for paint has pencil on it, not crumbs
+    scene.add(debris);
     if (s3Outside(theme).saucer) scene.add(buildSaucer(theme)); else G.saucer = null;
     const fx = new THREE.Scene();
     fx.add(buildMotes(theme));
@@ -1430,7 +1476,8 @@ function renderMirror() {
     if (floor) floor.visible = true;
     G.body.visible = wasBody;
     shader.uniforms.tReflect.value = G.mirrorTarget.texture;
-    shader.uniforms.uReflectStrength.value = (G.theme && G.theme.floorMat && G.theme.floorMat.reflect) || 1;
+    const reflect = G.theme && G.theme.floorMat ? G.theme.floorMat.reflect : undefined;
+    shader.uniforms.uReflectStrength.value = reflect === undefined ? 1 : reflect; // 0: matt, as paper is
 }
 
 function hexRgb(rgb) {
@@ -1466,6 +1513,20 @@ function render(view, dtMs, fly) {
     const theme = G.theme;
 
     updateTiles(view);
+
+    // A painted floor: take the painting again whenever the paint has moved
+    if (theme.paint && typeof paintPicture === 'function') {
+        const picture = paintPicture();
+        if (picture && (!G.paintTex || G.paintTex.image !== picture)) {
+            const old = G.paintTex;
+            G.floorMat.map = paintTexture(picture);
+            if (old) old.dispose();
+        }
+        if (G.paintTex && G.paintSeen !== paint.version) {
+            G.paintTex.needsUpdate = true;
+            G.paintSeen = paint.version;
+        }
+    }
 
     // Turn rate drives a little bank and a touch of horizontal blur
     let dA = view.angle - G.lastAngle;

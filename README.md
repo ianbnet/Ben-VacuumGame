@@ -87,6 +87,8 @@ The bar at the top of the page picks what to play.
 | `style-*.js` | One style pack per floor above the ground floor: themes, 3D builders, floor and backdrop painters, 2D painters. |
 | `modes.js` | The bar at the top (The House, Room of the Day, Build a Room, Race my best) and the room editor on the board. |
 | `install.js` | The home screen prompt for phones and tablets. |
+| `paint.js` | The painted room (level six): the brush that follows the vacuum, the sheets of paper, the pencil marks, and a plain wash for devices that cannot run the engine. |
+| `watercolor.js`, `vendor/blooms/` | The watercolor engine from Blooms, unchanged, and the module that runs it on a hidden canvas and tunes it for a vacuum. |
 | `render2d.js` | The top-down view in the atomic-age themes: the furniture painters (sofa, kidney table, shell chair, snake plant, pet bed, counters, crates, neon panels), the chrome dock, the vacuum and its ghost, cleaning effects, overlays, banner and help. |
 | `render3d.js` | The first-person view: a software raycaster into an `ImageData` buffer at up to 1.5x the canvas size, with a baked lightmap (window, lamp, dock, ambient occlusion), plaster and brick materials, a real window, see-over furniture, sprites, polished-floor reflections, dust motes, bloom and grade, and the dive transition. |
 | `audio.js` | Synthesised sound effects and the motor hum (Web Audio, no files). |
@@ -130,6 +132,28 @@ The 3D view was lifted for every floor at the same time: turned and faceted shap
 with bump maps, a style's own coloured lights, haze and colour grade, a ceiling lamp that casts
 shadows, and sharper reflections at the High and Ultra presets. Phones and tablets start on the
 Medium preset.
+
+## The painted room
+
+Level six, The Gauntlet, is painted instead of vacuumed. Its floor is a sheet of rough
+watercolor paper and the vacuum carries a brush. The rules are the same: cross every tile and
+get home before the battery runs out.
+
+- The paint is the watercolor engine from [Blooms](https://blooms.badweasley.com), copied
+  unchanged into `vendor/blooms/`. It runs on a hidden WebGL canvas and both views show that
+  canvas as the floor. `node scripts/vendor-blooms.mjs` refreshes the copy from a commit of
+  the Blooms repo; `vendor/blooms/SOURCE.md` names the commit in use.
+- Each trip out from the dock is one stroke in the palette's next pigment. The brush empties as
+  the battery does, and the dock refills both. Waiting on the dock lets water run in under it.
+- The paint keeps moving while it is wet, so it cannot show which tiles are done. Light pencil
+  hatching marks every tile still to paint and is rubbed out as the vacuum crosses it.
+- Every start and restart lays a fresh sheet with the next of seven palettes. A finished
+  painting stays in view for two seconds before the result card.
+- The engine needs WebGL2 with float layers. Without them the room is painted with a plain
+  wash drawn on a 2D canvas. The Classic 3D renderer does not show the painting.
+- `watercolor.js` holds the tuning that differs from Blooms, with the reasons. The main one:
+  Blooms lets a stroke drag the wash along with it, which in a long corridor carried the whole
+  ribbon to wherever the vacuum stopped.
 
 ## Home screen icon
 

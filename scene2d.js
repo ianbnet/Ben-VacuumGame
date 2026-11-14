@@ -175,6 +175,7 @@ function ensureSceneLayers() {
     if (!scene.lampArms) scene.lampArms = s2LampArms();
     scene.glaze = buildGlazeTile(theme);
     scene.dust = buildDustSprites(theme);
+    scene.pencil = theme.paint ? [0, 1, 2].map((v) => makeTileSprite((t) => paintPencilMark(t, TILE, v))) : null;
     scene.floor = buildFloorLayer(theme);
     scene.furniture = buildFurnitureLayer(theme);
     scene.light = buildLightLayer(theme);
@@ -478,7 +479,8 @@ function paintRoomShell(c, theme) {
 function buildFloorLayer(theme) {
     const L = makeLayer();
     const c = L.ctx;
-    paintFloor2D(c, theme);
+    // a painted room's floor is the painting, drawn underneath: this layer keeps only the walls
+    if (!theme.paint) paintFloor2D(c, theme);
     // ambient occlusion where the floor meets the walls
     const ao = 34;
     const edges = [[0, 0, 0, ao], [0, CANVAS_H, 0, CANVAS_H - ao], [0, 0, ao, 0], [CANVAS_W, 0, CANVAS_W - ao, 0]];
@@ -703,14 +705,44 @@ function moteBoxFor(theme) {
 // Floor, tile states, dock and furniture for a grid (the player's or the ghost's)
 function drawScene(g, fades) {
     ensureSceneLayers();
+    if (scene.theme.paint) {
+        const picture = paintPicture();
+        if (picture) ctx.drawImage(picture, 0, 0, CANVAS_W, CANVAS_H);
+        else {
+            ctx.fillStyle = `rgb(${PAINT_PAPER[0]}, ${PAINT_PAPER[1]}, ${PAINT_PAPER[2]})`;
+            ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+        }
+    }
     ctx.drawImage(scene.floor, 0, 0, CANVAS_W, CANVAS_H);
-    drawTileStates(g, fades);
+    if (scene.theme.paint) drawPencilStates(g, fades);
+    else drawTileStates(g, fades);
     drawChargingPad();
     drawTravelPad();
     const lv = LEVELS[currentLevel];
     drawChargerTile(lv.charger.col * TILE, lv.charger.row * TILE);
     ctx.drawImage(scene.furniture, 0, 0, CANVAS_W, CANVAS_H);
     drawCats();
+}
+
+// A painted room: pencil hatching on every tile still to paint, rubbed out as the tile is done.
+// The paint itself says nothing about which tiles are done; it goes where the water takes it.
+function drawPencilStates(g, fades) {
+    for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+            const cell = g[r][c];
+            if (cell !== DIRTY && cell !== CLEAN) continue;
+            let alpha = 1;
+            if (cell === CLEAN) {
+                const key = `${c},${r}`;
+                if (!fades || fades[key] === undefined || fades[key] >= 1) continue;
+                fades[key] = Math.min(1, fades[key] + 0.05 * dtFrames);
+                alpha = 1 - fades[key];
+            }
+            ctx.globalAlpha = alpha;
+            ctx.drawImage(scene.pencil[(r * 7 + c * 13) % 3], c * TILE, r * TILE, TILE, TILE);
+        }
+    }
+    ctx.globalAlpha = 1;
 }
 
 function drawTileStates(g, fades) {

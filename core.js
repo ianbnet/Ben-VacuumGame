@@ -173,6 +173,8 @@ const LEVELS = [
     },
     {
         name: 'The Gauntlet',
+        // Painted, not vacuumed: the floor is paper and the vacuum carries a brush (paint.js)
+        paint: 'watercolor',
         batteryCost: 3,
         charger: { col: 7, row: 6 },
         obstacles: [

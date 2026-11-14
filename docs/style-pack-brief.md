@@ -76,7 +76,8 @@ when the sky is dark), `env` (strength of reflections, about 0.3 to 1), `exposur
 1.25), `vignette`, `bloom: [strength, radius, threshold]` (the atomic look uses [0.28, 0.6, 0.95]),
 `grade: [r, g, b]` (a tint near 1), `fog: { color, density }` (density at most 0.02),
 `lights: [{ pos, color, intensity, distance }]` (up to 8 coloured point lights; only the first two are
-lit at the Low preset), `floorMat: { bump, normal, metalness, clearcoat, reflect, dust: [keep, r, g, b] }`,
+lit at the Low preset), `floorMat: { bump, normal, metalness, clearcoat, reflect, rough: [done, waiting], dust: [keep, r, g, b], marks }`
+(`reflect: 0` is matt; `marks: 'pencil'` swaps the dust for pencil hatching, as the painted room does),
 `wallHeight` (how tall the interior walls stand, for 2D shadows), `lamp.down: true` (the ceiling lamp
 only shines downward). Lessons from the reference pack: light sources bloom, so keep
 `emissiveIntensity` at about 1 to 2.5; a dark room needs `fill` and `ambient` near 0.85 or its walls

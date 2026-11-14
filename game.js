@@ -162,6 +162,7 @@ function initLevel(levelIndex) {
     gameNotice.until = 0;
     setupBestGhost();
     applyUpgrades();
+    paintFreshSheet(); // a painted room starts each attempt on new paper; other rooms have none
     buildLevelSelect();
     updateUI();
     // Get the 3D view ready for this level while the banner is up
@@ -1254,6 +1255,7 @@ function renderFrame(timestamp = performance.now()) {
 
     ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
     updateBestGhost();
+    paintTick(dtMs);
 
     const fpActive = viewMode === 'FP' &&
         (gameState === 'PLAYING' || gameState === 'LEVEL_COMPLETE' || gameState === 'GAME_OVER');

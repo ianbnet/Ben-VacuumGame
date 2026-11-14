@@ -126,6 +126,25 @@ const S3_THEMES = [
     },
 ];
 
+// A painted room (paint.js) is a white studio under even light, so the colour on the paper
+// is the only colour in it. The floor is the painting itself, laid in by the renderers.
+const S3_PAPER_THEME = {
+    name: 'Watercolor Studio', time: 'morning', paint: 'watercolor',
+    sun: { azimuth: -30, elevation: 50, color: '#FFF7EA', intensity: 2.2 },
+    sky: { zenith: '#9CC2E0', horizon: '#F4F0E8', ground: '#C2BFB0' },
+    ambient: 1.0, lamp: { on: false, color: '#FFFFFF', intensity: 0 },
+    // white light from above and a bright, even exposure, so the paper reads as white
+    fill: '#FFFFFF', env: 0.6, exposure: 1.34, vignette: 0.2, bloom: [0.1, 0.5, 0.99],
+    fog: { color: '#F4F0E8', density: 0.005 },
+    walls: '#F3F0E9', accent: { wall: 'north', color: '#EAE5DA' }, trim: '#FFFFFF', ceiling: '#FAF8F3',
+    floor: 'paper', floorSeed: 606, wallStyle: 'partition',
+    couch: '#DCD6C8', pillow: '#F2EEE4', couchWood: '#CDBB9E', chair: '#CDBB9E', table: '#DCCBAA',
+    leaf: '#6E9B78', planter: '#F2EEE4', petbed: '#E4DED0', cat: '#9A9A9A',
+    door: { wall: 'west', at: 6, color: '#DCCBAA' }, outside: 'suburb', prints: ['boomerang', 'starburst'],
+    // matt paper: no polish, no mirror; wet-looking where painted, pencil where not
+    floorMat: { bump: 0.2, normal: 0.3, clearcoat: 0, reflect: 0, rough: [165, 240], dust: [0.2, 0.1, 0.1, 0.13], marks: 'pencil' },
+};
+
 // --- Style packs -------------------------------------------------------------------------------
 // A floor of the house can wear a whole different look. A style pack is one file
 // (style-*.js) that registers itself here with six themes of its own and, for whatever it
@@ -166,11 +185,13 @@ function s3PackTexture(handle) {
     return (pack && pack.textures && pack.textures[handle.slice(cut + 1)]) || null;
 }
 
-// The theme for a level. Extra rooms (the room of the day, built rooms) name one of the six
-// atomic themes. A house room takes the pack of its floor and the theme of its place on it.
+// The theme for a level. A painted room is the paper studio. Extra rooms (the room of the day,
+// built rooms) name one of the six atomic themes. Any other house room takes the pack of its
+// floor and the theme of its place on it.
 function s3Theme(levelIndex) {
     const lv = typeof LEVELS !== 'undefined' ? LEVELS[levelIndex] : null;
     const wrap = (n, len) => ((n % len) + len) % len;
+    if (lv && lv.paint) return S3_PAPER_THEME;
     if (lv && Number.isInteger(lv.theme)) return S3_THEMES[wrap(lv.theme, S3_THEMES.length)];
     const size = typeof FLOOR_SIZE === 'number' ? FLOOR_SIZE : S3_THEMES.length;
     const pack = S3_STYLE_PACKS[S3_FLOOR_STYLE[Math.floor(Math.max(0, levelIndex) / size)]];

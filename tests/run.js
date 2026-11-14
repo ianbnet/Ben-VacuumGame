@@ -34,8 +34,9 @@ function stubElement() {
     });
 }
 
+// Whatever a drawing call returns (a gradient, a pattern) takes calls of its own
 function stubContext() {
-    return new Proxy({}, { get: () => () => ({}) });
+    return new Proxy({}, { get: (t, k) => (k in t ? t[k] : () => stubContext()), set: (t, k, v) => { t[k] = v; return true; } });
 }
 
 const storage = new Map();
@@ -59,7 +60,7 @@ const sandbox = {
 };
 sandbox.window = sandbox;
 vm.createContext(sandbox);
-for (const f of ['core.js', 'levels.js', 'rooms.js', 'upgrades.js', 'design.js', 'scene3d.js', ...['style-scifi.js', 'style-steam.js', 'style-voxel.js', 'style-wonder.js'].filter((f) => fs.existsSync(path.join(root, f))), 'render2d.js', 'scene2d.js', 'render3d.js', 'game.js', 'modes.js', 'install.js']) {
+for (const f of ['core.js', 'levels.js', 'rooms.js', 'upgrades.js', 'design.js', 'scene3d.js', ...['style-scifi.js', 'style-steam.js', 'style-voxel.js', 'style-wonder.js'].filter((f) => fs.existsSync(path.join(root, f))), 'paint.js', 'render2d.js', 'scene2d.js', 'render3d.js', 'game.js', 'modes.js', 'install.js']) {
     vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), sandbox, { filename: f });
 }
 const G = (expr) => vm.runInContext(expr, sandbox);
@@ -865,8 +866,9 @@ section('Floor styles');
 {
     check(G('S3_FLOOR_STYLE.length') === G('FLOOR_NAMES.length') && G('S3_FLOOR_STYLE[0]') === 'atomic', 'every floor names a style, and the ground floor keeps the atomic one');
     let same = true;
-    for (let i = 0; i < 6; i++) if (G(`s3Theme(${i}) !== S3_THEMES[${i}] || s3Theme(${i}).style !== undefined`)) same = false;
-    check(same, 'the six ground floor rooms use the original themes, untouched');
+    for (let i = 0; i < 5; i++) if (G(`s3Theme(${i}) !== S3_THEMES[${i}] || s3Theme(${i}).style !== undefined`)) same = false;
+    check(same, 'the first five ground floor rooms use the original themes, untouched');
+    check(G('s3Theme(5) === S3_PAPER_THEME && s3Theme(5).style === undefined'), 'the sixth is the paper studio, built with the original furniture');
     check(G('s3Theme(6).style') === 'scifi' && G('s3Theme(6) === S3_STYLE_PACKS.scifi.themes[0] && s3Theme(11) === S3_STYLE_PACKS.scifi.themes[5]'), 'the second floor wears the sci-fi pack, one theme for each place on the floor');
     check(G("S3_FLOOR_STYLE.every((name) => name === 'atomic' || !!S3_STYLE_PACKS[name])") && G('new Set(S3_FLOOR_STYLE).size') === 5, 'every floor above the ground floor has its own registered style pack');
     let floorsOk = true;
@@ -1013,6 +1015,91 @@ section('Home screen install');
     check(has('192x192', 'any') && has('512x512', 'any') && has('512x512', 'maskable'), 'the manifest lists the icon sizes Android asks for, one of them maskable');
     check(manifest.icons.every((i) => i.type === 'image/png' && pngSize(i.src) === i.sizes), 'every icon file is a PNG of the size the manifest claims');
     check(pngSize('icons/apple-touch-icon.png') === '180x180', 'the iOS icon is 180 pixels square');
+}
+
+section('The painted room');
+{
+    const step = (n) => G(`for (let i = 0; i < ${n}; i++) paintAdvance(PAINT_STEP)`);
+    check(G('LEVELS.filter((l) => l.paint).length') === 1 && G("LEVELS[5].paint === 'watercolor' && LEVELS[5].name === 'The Gauntlet' && LEVELS[5].batteryCost === 3"), 'level six alone is painted, and keeps its layout');
+    check(G('isPaintRoom(5)') === true && G('isPaintRoom(0)') === false && G('isPaintRoom(SPECIAL_LEVEL)') === false, 'only a room marked for paint is a painted room');
+
+    G('progress.unlocked = HOUSE_LEVELS - 1; progress.upgrades = sanitizeUpgrades(null); viewMode = "TD"; selectLevel(0)');
+    check(G('paint.sheet === null && paintPicture() === null'), 'an ordinary room has no sheet of paper');
+    G('selectLevel(5)');
+    check(G("paint.sheet && paint.sheet.kind === 'flat' && paintPicture() === paint.sheet.canvas"), 'without the engine the room still gets paper, and a plain wash');
+    check(Math.abs(G('paintFullCharge()') - 100 / 3) < 1e-9, 'the brush is sized to the moves a full battery pays for');
+
+    check(G('paintBrush(PAINT_STEP).length') === 0 && G('paintBrush(PAINT_STEP).length') === 0 && G('paint.strokes') === 0, 'a vacuum that has not moved paints nothing');
+    G('tryMove(0, -1)');
+    const first = G('JSON.stringify(paintBrush(PAINT_STEP))');
+    const p1 = JSON.parse(first)[0];
+    check(p1 && p1.isNew === false && G('paint.strokes') === 1 && p1.y > p1.py && p1.x === p1.px, 'the first move opens a stroke, and up the room is up the sheet');
+    check(Math.abs(p1.x - 7.5 / 12) < 1e-9, 'the brush is placed in sheet units: the short edge of the floor is 1');
+    step(200);
+    check(G('paint.bx === 7 * TILE + TILE / 2 && paint.by === 5 * TILE + TILE / 2'), 'the brush comes to rest under the vacuum');
+    check(G('paint.still <= PAINT_STILL_CAP && paint.ptr.engaged === false') && G('paint.sheet.turn') === 0, 'waiting in the room neither reloads the brush nor runs water in');
+
+    G('tryMove(0, 1)');
+    let wet = 0;
+    for (let i = 0; i < 400; i++) { G('paintAdvance(PAINT_STEP)'); if (G('paint.ptr.engaged')) wet++; }
+    check(wet > 30 && wet / 60 <= G('PAINT_DOCK_BLOOM + PAINT_HOLD_DELAY') + 0.05, 'back on the dock, water runs in for a moment and then stops');
+    G('tryMove(0, -1)');
+    const second = JSON.parse(G('JSON.stringify(paintBrush(PAINT_STEP))'))[0];
+    check(second && second.isNew === true && G('paint.strokes') === 2, 'leaving the dock again starts a new stroke');
+    G('paint.sheet.step(PAINT_STEP, [paint.ptr])');
+    check(G('paint.sheet.turn') === 1, 'and a new stroke takes the next pigment');
+    step(60);
+    G('tryMove(0, -1)');
+    step(2);
+    check(G('paint.strokes') === 2 && G('paint.ptr.isNew') === false, 'moving on within a trip stays one stroke');
+
+    G('roomba.col = 12; roomba.row = 2');
+    check(G('paintBrush(PAINT_STEP).length') === 0 && G('paint.inStroke') === false, 'a vacuum put somewhere else draws no line across the room');
+    G('gameState = "PAR_REPLAY"');
+    check(G('paintBrushTarget()') === null && G('paintBrush(PAINT_STEP).length') === 0, 'the par replay does not paint');
+    G('gameState = "PLAYING"');
+
+    const before = G('JSON.stringify([paint.sheetNo, paintPalette()])');
+    G('restartLevel()');
+    const after = G('JSON.stringify([paint.sheetNo, paintPalette()])');
+    check(JSON.parse(after)[0] === JSON.parse(before)[0] + 1 && JSON.parse(after)[1] !== JSON.parse(before)[1] && G('paint.strokes') === 0, 'a restart lays a fresh sheet with the next palette');
+    check(G('PAINT_PALETTES.every((n) => PAINT_FLAT_COLOURS[n] && PAINT_FLAT_COLOURS[n].length === 4) && !PAINT_PALETTES.includes(1)'), 'every palette in use has its four wash colours, and Dusk is left out');
+
+    // The engine arrives after the page, and can be lost
+    G(`var wcMade = 0; window.wcEngine = { create: () => { wcMade++; return { canvas: { id: wcMade }, lost: false, atRest: () => true, step() {}, draw() {}, setReach() {}, dispose() { this.gone = true; } }; } }`);
+    G('paintTick(16)');
+    check(G("paint.sheet.kind === 'engine'") && G('wcMade') === 1, 'a sheet no brush has touched moves to the engine when it arrives');
+    G('paint.sheet.lost = true; paintTick(16)');
+    check(G("paint.sheet.kind === 'flat'"), 'a sheet whose graphics are taken away falls back to the plain wash');
+    G('window.wcEngine = { create: () => null }; restartLevel(); paintTick(40); tryMove(0, -1); paintTick(40)');
+    check(G('paint.strokes') === 1, 'a frame of the game is enough for a move to start painting');
+    G(`window.wcEngine = { create: () => { wcMade++; return { canvas: {}, lost: false, atRest: () => true, step() {}, draw() {}, setReach() {}, dispose() {} }; } }`);
+    G('paintTick(16)');
+    check(G("paint.sheet.kind === 'flat'") && G('wcMade') === 1, 'a sheet already painted on is not swapped under the brush');
+    G('window.wcEngine = undefined; selectLevel(0)');
+    check(G('paint.sheet === null'), 'leaving the room puts the sheet away');
+
+    G('const pm = document.createElement("canvas").getContext("2d"); paintPencilMark(pm, 48, 0); paintPencilMark(pm, 128, 7, 2.2); paintPaper(pm, 64, 64, 3)');
+    check(true, 'the pencil mark and the paper draw without a real canvas');
+
+    // What ships
+    const page = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+    check(page.indexOf('<script src="paint.js">') > 0 && page.indexOf('<script src="paint.js">') < page.indexOf('<script src="render2d.js">') && /<script type="module" src="watercolor\.js"><\/script>/.test(page), 'the page loads the brush before the renderers, and the engine as a module');
+    const imports = (file) => [...fs.readFileSync(path.join(root, file), 'utf8').matchAll(/^\s*import\s[^'"]*?from\s*['"](\.[^'"]+)['"]/gm)].map((m) => path.join(path.dirname(file), m[1]));
+    const seen = new Set();
+    const queue = ['watercolor.js'];
+    let missing = 0;
+    while (queue.length) {
+        const f = queue.pop();
+        if (seen.has(f)) continue;
+        seen.add(f);
+        if (!fs.existsSync(path.join(root, f))) { missing++; continue; }
+        queue.push(...imports(f));
+    }
+    check(missing === 0 && seen.size >= 12 && [...seen].every((f) => f === 'watercolor.js' || f.startsWith(path.join('vendor', 'blooms'))), 'every file the engine imports is in vendor/blooms');
+    check(/commit `[0-9a-f]{7,}`/.test(fs.readFileSync(path.join(root, 'vendor/blooms/SOURCE.md'), 'utf8')), 'the copy of Blooms names the commit it came from');
+    const publish = fs.readFileSync(path.join(root, 'scripts/publish-netlify.mjs'), 'utf8');
+    check(publish.includes("name.startsWith(BLOOMS) && name.endsWith('.js')"), 'the publish list takes the engine\'s scripts and leaves its notes behind');
 }
 
 console.log(`\n${passes} passed, ${failures} failed`);

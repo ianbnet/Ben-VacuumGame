@@ -1364,14 +1364,19 @@ function drawOverlay() {
     const cy = CANVAS_H / 2;
     if (gameState === 'LEVEL_COMPLETE') {
         const r = levelResult || { moves, par: parMoves, bonus: 0, stars: 1, tileScore: cleaned * 10, at: 0 };
+        // A finished painting is the reward: it is left in view for two seconds before the
+        // card comes over it, and is dimmed less behind the card.
+        const painted = isPaintRoom();
+        const wait = painted ? PAINT_ADMIRE_FRAMES : 0;
+        if (chargerPulse - (r.at || 0) < wait) return;
         ctx.save();
-        ctx.fillStyle = 'rgba(10, 14, 18, 0.5)';
+        ctx.fillStyle = painted ? 'rgba(10, 14, 18, 0.26)' : 'rgba(10, 14, 18, 0.5)';
         ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
         drawCard(cx - 270, cy - 156, 540, 312, UI.mint);
         uiText('LEVEL COMPLETE', cx, cy - 112, 28, UI.cream, 'center', '500', 6);
 
         // Stars pop in one after another
-        const since = chargerPulse - (r.at || 0);
+        const since = chargerPulse - (r.at || 0) - wait;
         for (let i = 0; i < 3; i++) {
             const s = Math.max(0, Math.min(1, (since - i * 14) / 12));
             const scale = s < 1 ? 0.3 + 0.7 * s + 0.35 * Math.sin(s * Math.PI) : 1;
@@ -1455,6 +1460,7 @@ function drawBanner() {
     const theme = s3Theme(currentLevel);
     const extra = [];
     if (house && currentLevel === 0 && !best) extra.push('Clean every tile  ·  dock before the battery dies  ·  beat par');
+    if (isPaintRoom()) extra.push('Paint every tile  ·  each trip from the dock is a new colour');
     if (best) extra.push(`Your best: ${best.moves} moves  ${'★'.repeat(best.stars)}   ·   Par ${parMoves}`);
     else if (!house) extra.push(`Par ${parMoves}`);
     const boxW = house ? 440 : 500;
@@ -1478,7 +1484,9 @@ function drawBanner() {
 // Full-screen help, toggled with H or ?
 function drawHelp() {
     const lines = [
-        ['Goal', 'Clean every tile. The dock refills the battery. Finishing under par earns a bigger bonus.'],
+        ['Goal', isPaintRoom()
+            ? 'Paint every tile: the pencil marks show which are left. The dock refills the battery and the brush.'
+            : 'Clean every tile. The dock refills the battery. Finishing under par earns a bigger bonus.'],
         ['Move', 'Arrow keys or WASD. Hold a key to keep going. The on-screen d-pad works the same way.'],
         ['3D view', 'V or the 3D View button. In 3D, left and right turn in place; up and down drive forward and back.'],
         ['Restart', 'R restarts the room and its score. SPACE, or a click on the board, goes to the next room when one is done.'],
