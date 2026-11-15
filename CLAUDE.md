@@ -7,6 +7,6 @@
 - **To publish:** commit, then `npm run deploy`. It runs the tests, then builds, deploys and verifies from `~/code/badweasley` (the same as running `npm run deploy:vacuum` and `npm run verify` there).
 - `npm run deploy:check` lists what would ship and touches no network. What ships is still chosen by `scripts/publish-netlify.mjs --stage`; the file keeps its old name only for that.
 - The live site answers with an `X-Build` header naming the commit that is published.
-- **Nothing may cost money.** Everything under badweasley.com is on Cloudflare's free plans: no Workers Paid, no R2, no paid add-on. Do not edit DNS by hand and do not touch any other Worker.
+- **Spend nothing new.** The Cloudflare account is on Workers Paid ($5 a month for the whole account, Ian's decision of 2026-11-14, made for Ocean to Lakes). This game needs none of it: no R2, no paid add-on. Do not edit DNS by hand and do not touch any other Worker.
 - wrangler is already signed in on this Mac. Do not log in or out, and do not create API tokens.
 - The full picture for every badweasley.com site is in `~/code/badweasley/PUBLISHING.md`.
