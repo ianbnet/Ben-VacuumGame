@@ -174,7 +174,7 @@ home screen game keeps its own saves, separate from the same site in Safari.
 ## Publishing
 
 The game is live at <https://vacuum.badweasley.com>, served by the Cloudflare Worker
-`badweasley-vacuum`. It moved there from Netlify on 11 November 2026.
+`badweasley-vacuum`, which also answers at <https://vacuum.benjaminbergman.com>. It moved there from Netlify on 11 November 2026.
 `robot-vacuum-game.netlify.app` is the old address and is no longer updated.
 
 ```sh
